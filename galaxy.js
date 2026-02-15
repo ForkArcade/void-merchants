@@ -1,147 +1,138 @@
-// Space Trader — Galaxy
+// Void Merchants — Galaxy
 // Procedural galaxy, star systems, stations, economy simulation
-// Exports: window.Galaxy
 (function() {
   'use strict';
   var FA = window.FA;
-
   var _systems = [];
+  var _stations = {};
   var _rng = null;
   var _marketTime = 0;
-
-  // === GALAXY INITIALIZATION ===
-  // Generate systems from seed, assign factions by territory, create station markets
 
   function init(seed) {
     var cfg = FA.lookup('config', 'game');
     _rng = FA.createRNG(seed);
     _systems = FA.generateGalaxy(seed, cfg.systemCount);
     _marketTime = 0;
+    _stations = {};
+    assignFactions();
+    createStations();
+  }
 
-    // Assign factions by proximity to faction "capitals"
-    // Pick one system per faction as capital, then assign nearest unowned systems
-    // Use faction.systemShare to determine how many systems each faction controls
+  function assignFactions() {
     var factions = FA.lookupAll('factions');
-    var factionIds = Object.keys(factions);
+    var fids = Object.keys(factions);
+    var n = _systems.length;
+    var capitals = {};
+    var used = {};
 
-    // TODO: Pick capital systems (spread evenly across galaxy)
-    // TODO: Assign remaining systems to nearest faction capital
-    // TODO: Leave some systems as 'independent' (no faction)
-    // TODO: Create station objects for each system with market inventories
-  }
-
-  // === SYSTEM ACCESS ===
-
-  function getSystem(id) {
-    return _systems[id] || null;
-  }
-
-  function getSystems() {
-    return _systems;
-  }
-
-  // Returns station data: { name, market: { commodityId: { supply, buyPrice, sellPrice } } }
-  function getStation(systemId, stationIndex) {
-    // TODO: Generate station data for the given system
-    // Station name = system name + station type suffix
-    // Market prices = computePrice() for each commodity
-    return null;
-  }
-
-  function getConnections(systemId) {
-    var sys = _systems[systemId];
-    return sys ? sys.connections : [];
-  }
-
-  // === MARKET SIMULATION ===
-
-  // Price formula:
-  //   price = basePrice * economyMod[system.economy] * (0.8 + fluctuation * 0.4) * (1 + danger * 0.05)
-  //   fluctuation = sin(marketTime * 0.001 + systemId * 7.3) * 0.5 + 0.5
-  function computePrice(commodityId, system) {
-    var commodity = FA.lookup('commodities', commodityId);
-    if (!commodity) return 0;
-
-    var mod = commodity.economyMod[system.economy] || 1.0;
-    var fluctuation = Math.sin(_marketTime * 0.001 + system.id * 7.3) * 0.5 + 0.5;
-    var dangerBonus = 1 + system.danger * 0.05;
-
-    return Math.round(commodity.basePrice * mod * (0.8 + fluctuation * 0.4) * dangerBonus);
-  }
-
-  // Buy price = computePrice (what you pay)
-  // Sell price = computePrice * (1 - tradeTax) (what you receive)
-  function getBuyPrice(commodityId, system) {
-    return computePrice(commodityId, system);
-  }
-
-  function getSellPrice(commodityId, system) {
-    var cfg = FA.lookup('config', 'game');
-    return Math.round(computePrice(commodityId, system) * (1 - cfg.tradeTax));
-  }
-
-  // Update market fluctuation timer
-  function updateMarkets(dt) {
-    _marketTime += dt;
-  }
-
-  // === NAVIGATION ===
-
-  function jumpDistance(fromId, toId) {
-    var a = _systems[fromId], b = _systems[toId];
-    if (!a || !b) return Infinity;
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  // Fuel cost proportional to distance
-  function fuelForJump(fromId, toId) {
-    var cfg = FA.lookup('config', 'game');
-    var dist = jumpDistance(fromId, toId);
-    return Math.ceil(cfg.fuelPerJump * (dist / 200));
-  }
-
-  // Returns system IDs reachable with given fuel
-  function getSystemsInRange(systemId, fuelAvailable) {
-    var results = [];
-    for (var i = 0; i < _systems.length; i++) {
-      if (i === systemId) continue;
-      if (fuelForJump(systemId, i) <= fuelAvailable) {
-        results.push(i);
+    for (var f = 0; f < fids.length; f++) {
+      var bestId = -1, bestDist = 0;
+      for (var i = 0; i < n; i++) {
+        if (used[i]) continue;
+        var minD = Infinity;
+        for (var c in capitals) {
+          var d = Math.hypot(_systems[i].x - _systems[capitals[c]].x, _systems[i].y - _systems[capitals[c]].y);
+          if (d < minD) minD = d;
+        }
+        if (Object.keys(capitals).length === 0) minD = Math.hypot(_systems[i].x, _systems[i].y) + 100;
+        if (minD > bestDist) { bestDist = minD; bestId = i; }
+      }
+      if (bestId >= 0) {
+        capitals[fids[f]] = bestId;
+        used[bestId] = true;
+        _systems[bestId].faction = fids[f];
       }
     }
-    return results;
+
+    for (var s = 0; s < n; s++) {
+      if (_systems[s].faction) continue;
+      var nearest = null, nearDist = Infinity;
+      for (var fid in capitals) {
+        var cap = _systems[capitals[fid]];
+        var dist = Math.hypot(_systems[s].x - cap.x, _systems[s].y - cap.y);
+        if (dist < nearDist) { nearDist = dist; nearest = fid; }
+      }
+      _systems[s].faction = _rng.next() < 0.15 ? null : nearest;
+    }
   }
 
-  // Returns connected systems sorted by profit potential
-  // Each entry: { systemId, commodity, buyHere, sellThere, profit }
-  function findTradeRoutes(systemId) {
-    var sys = _systems[systemId];
-    if (!sys) return [];
+  function createStations() {
+    var suffixes = ['Hub', 'Port', 'Dock', 'Station', 'Outpost', 'Base', 'Terminal'];
+    for (var i = 0; i < _systems.length; i++) {
+      var sys = _systems[i];
+      var list = [];
+      for (var s = 0; s < sys.stations; s++) {
+        var angle = (s / sys.stations) * Math.PI * 2 + _rng.next() * 0.5;
+        var r = 100 + s * 70 + _rng.int(0, 30);
+        list.push({ name: sys.name + ' ' + _rng.pick(suffixes), x: Math.cos(angle) * r, y: Math.sin(angle) * r, orbitAngle: angle, orbitRadius: r });
+      }
+      _stations[i] = list;
+    }
+  }
 
-    var commodities = FA.lookupAll('commodities');
+  function getSystem(id) { return _systems[id] || null; }
+  function getSystems() { return _systems; }
+  function getStation(systemId, idx) { var l = _stations[systemId]; return l ? l[idx || 0] : null; }
+  function getStations(systemId) { return _stations[systemId] || []; }
+  function getConnections(systemId) { var s = _systems[systemId]; return s ? s.connections : []; }
+
+  function computePrice(commodityId, system) {
+    var c = FA.lookup('commodities', commodityId);
+    if (!c) return 0;
+    var mod = c.economyMod[system.economy] || 1.0;
+    var fluct = Math.sin(_marketTime * 0.001 + system.id * 7.3) * 0.5 + 0.5;
+    return Math.round(c.basePrice * mod * (0.8 + fluct * 0.4) * (1 + system.danger * 0.05));
+  }
+
+  function getBuyPrice(cid, sys) { return computePrice(cid, sys); }
+  function getSellPrice(cid, sys) { var cfg = FA.lookup('config', 'game'); return Math.round(computePrice(cid, sys) * (1 - cfg.tradeTax)); }
+  function updateMarkets(dt) { _marketTime += dt; }
+
+  function jumpDistance(a, b) { var sa = _systems[a], sb = _systems[b]; return (sa && sb) ? Math.hypot(sa.x - sb.x, sa.y - sb.y) : Infinity; }
+  function fuelForJump(a, b) { var cfg = FA.lookup('config', 'game'); return Math.ceil(cfg.fuelPerJump * (jumpDistance(a, b) / 200)); }
+  function isConnected(a, b) { var s = _systems[a]; return s && s.connections.indexOf(b) !== -1; }
+
+  function getSystemsInRange(sid, fuel) {
+    var r = [];
+    for (var i = 0; i < _systems.length; i++) {
+      if (i !== sid && isConnected(sid, i) && fuelForJump(sid, i) <= fuel) r.push(i);
+    }
+    return r;
+  }
+
+  function findTradeRoutes(sid) {
+    var sys = _systems[sid]; if (!sys) return [];
+    var coms = FA.lookupAll('commodities');
     var routes = [];
-
-    // TODO: For each connected system, compute best commodity to buy here and sell there
-    // Sort by profit descending
-    // Return top 5 routes
-
-    return routes;
+    var conns = sys.connections;
+    for (var c = 0; c < conns.length; c++) {
+      var t = _systems[conns[c]];
+      for (var cid in coms) {
+        var buy = getBuyPrice(cid, sys), sell = getSellPrice(cid, t), profit = sell - buy;
+        if (profit > 0) routes.push({ systemId: conns[c], systemName: t.name, commodity: cid, commodityName: coms[cid].name, buyHere: buy, sellThere: sell, profit: profit });
+      }
+    }
+    routes.sort(function(a, b) { return b.profit - a.profit; });
+    return routes.slice(0, 8);
   }
 
-  // === EXPORT ===
-  window.Galaxy = {
-    init: init,
-    getSystem: getSystem,
-    getSystems: getSystems,
-    getStation: getStation,
-    getConnections: getConnections,
-    computePrice: computePrice,
-    getBuyPrice: getBuyPrice,
-    getSellPrice: getSellPrice,
-    updateMarkets: updateMarkets,
-    jumpDistance: jumpDistance,
-    fuelForJump: fuelForJump,
-    getSystemsInRange: getSystemsInRange,
-    findTradeRoutes: findTradeRoutes
-  };
+  function generateMissions(sid) {
+    var sys = _systems[sid]; if (!sys) return [];
+    var ms = [], coms = FA.lookupAll('commodities'), cfg = FA.lookup('config', 'game');
+
+    if (sys.connections.length > 0) {
+      var did = FA.pick(sys.connections), dest = _systems[did], com = FA.pick(Object.keys(coms));
+      ms.push({ type: 'delivery', title: 'Deliver ' + coms[com].name + ' to ' + dest.name, destination: did, destinationName: dest.name, commodity: com, quantity: FA.rand(3, 8), reward: FA.rand(300, 800), repFaction: sys.faction, repDelta: 5, timeout: cfg.missionTimeout });
+    }
+    if (sys.danger >= 2) {
+      ms.push({ type: 'combat', title: 'Clear pirates near ' + sys.name, target: sid, killCount: FA.rand(2, 4), killed: 0, reward: FA.rand(500, 1200), repFaction: sys.faction || 'federation', repDelta: 10, timeout: cfg.missionTimeout });
+    }
+    var exploreTarget = FA.rand(0, _systems.length - 1);
+    if (exploreTarget !== sid) {
+      ms.push({ type: 'exploration', title: 'Survey ' + _systems[exploreTarget].name, destination: exploreTarget, destinationName: _systems[exploreTarget].name, reward: FA.rand(200, 600), repFaction: 'scientists', repDelta: 8, timeout: cfg.missionTimeout });
+    }
+    return ms;
+  }
+
+  window.Galaxy = { init: init, getSystem: getSystem, getSystems: getSystems, getStation: getStation, getStations: getStations, getConnections: getConnections, computePrice: computePrice, getBuyPrice: getBuyPrice, getSellPrice: getSellPrice, updateMarkets: updateMarkets, jumpDistance: jumpDistance, fuelForJump: fuelForJump, isConnected: isConnected, getSystemsInRange: getSystemsInRange, findTradeRoutes: findTradeRoutes, generateMissions: generateMissions };
 })();

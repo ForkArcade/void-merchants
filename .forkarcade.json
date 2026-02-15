@@ -1,5 +1,24 @@
 {
   "template": "space-trader",
-  "engineFiles": ["fa-engine.js", "fa-renderer.js", "fa-input.js", "fa-audio.js"],
-  "gameFiles": ["data.js", "galaxy.js", "player.js", "combat.js", "render.js", "main.js"]
+  "engineFiles": [
+    "fa-engine.js",
+    "fa-renderer.js",
+    "fa-input.js",
+    "fa-audio.js"
+  ],
+  "gameFiles": [
+    "data.js",
+    "galaxy.js",
+    "player.js",
+    "combat.js",
+    "render.js",
+    "main.js"
+  ],
+  "slug": "void-merchants",
+  "title": "Void Merchants",
+  "currentVersion": 0,
+  "versions": [],
+  "sdkVersion": 1,
+  "style": "dark-neon",
+  "fontFamily": "Orbitron, monospace"
 }
