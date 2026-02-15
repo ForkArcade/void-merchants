@@ -277,6 +277,24 @@
         ctx.fill();
         ctx.restore();
       }
+
+      // Draw station orbit paths
+      var player = Player.getShip();
+      var orbitStations = Galaxy.getStations(player.currentSystem);
+      ctx.setLineDash([4, 8]);
+      for (var oi = 0; oi < orbitStations.length; oi++) {
+        var orb = orbitStations[oi];
+        var osx = 0 - camX;
+        var osy = 0 - camY;
+        FA.draw.withAlpha(0.12, function() {
+          ctx.strokeStyle = '#4af';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(osx, osy, orb.orbitRadius, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+      }
+      ctx.setLineDash([]);
     }, 10);
 
     // ========== LAYER: System View Objects (order 11) ==========
@@ -826,6 +844,66 @@
       var missions = Player.getActiveMissions();
       if (missions.length > 0) {
         FA.draw.text(missions[0].title, W - 15, H - 32, { color: '#c8b4ff', size: 10, align: 'right' });
+      }
+
+      // Station edge indicators (off-screen stations)
+      if (state.view === 'system_view') {
+        var stInd = Galaxy.getStations(player.currentSystem);
+        var camIX = FA.camera.x;
+        var camIY = FA.camera.y;
+        var margin = 30;
+        var ctx = FA.getCtx();
+
+        for (var si = 0; si < stInd.length; si++) {
+          var sti = stInd[si];
+          var scrX = sti.x - camIX;
+          var scrY = sti.y - camIY;
+
+          // Only draw indicator if station is off-screen
+          if (scrX >= margin && scrX <= W - margin && scrY >= margin && scrY <= H - margin) continue;
+
+          // Direction from screen center to station
+          var dirX = scrX - W / 2;
+          var dirY = scrY - H / 2;
+          var dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (dirLen < 1) continue;
+          dirX /= dirLen;
+          dirY /= dirLen;
+
+          // Clamp to screen edge
+          var edgeX = W / 2 + dirX * (W / 2 - margin);
+          var edgeY = H / 2 + dirY * (H / 2 - margin);
+
+          // Clamp within bounds
+          if (edgeX < margin) { edgeX = margin; edgeY = H / 2 + dirY * ((margin - W / 2) / dirX); }
+          if (edgeX > W - margin) { edgeX = W - margin; edgeY = H / 2 + dirY * ((W - margin - W / 2) / dirX); }
+          if (edgeY < margin) { edgeY = margin; edgeX = W / 2 + dirX * ((margin - H / 2) / dirY); }
+          if (edgeY > H - margin) { edgeY = H - margin; edgeX = W / 2 + dirX * ((H - margin - H / 2) / dirY); }
+
+          edgeX = Math.max(margin, Math.min(W - margin, edgeX));
+          edgeY = Math.max(margin, Math.min(H - margin, edgeY));
+
+          // Distance from player
+          var pDist = Math.round(Math.sqrt((player.x - sti.x) * (player.x - sti.x) + (player.y - sti.y) * (player.y - sti.y)));
+
+          // Arrow triangle
+          var aAngle = Math.atan2(dirX, -dirY);
+          ctx.save();
+          ctx.translate(edgeX, edgeY);
+          ctx.rotate(aAngle);
+          ctx.beginPath();
+          ctx.moveTo(0, -6);
+          ctx.lineTo(-4, 4);
+          ctx.lineTo(4, 4);
+          ctx.closePath();
+          ctx.fillStyle = '#88aacc';
+          ctx.fill();
+          ctx.restore();
+
+          // Station name + distance
+          FA.draw.text(sti.name, edgeX, edgeY + 10, { color: '#88aacc', size: 8, align: 'center', baseline: 'top' });
+          FA.draw.text(pDist + '', edgeX, edgeY + 20, { color: '#556', size: 8, align: 'center', baseline: 'top' });
+        }
       }
 
       // Control hints per view
