@@ -84,7 +84,7 @@
       availableMissions: [],
       dockStation: null,
       selectionList: [],
-      npcs: spawnSystemNPCs(0)
+      npcs: []
     });
 
     // Initialize narrative
