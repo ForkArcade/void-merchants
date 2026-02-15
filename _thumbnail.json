@@ -1,0 +1,278 @@
+{
+  "path": "/home/dadmor/code/fork-arcade/games/void-merchants",
+  "layers": [
+    {
+      "res": [
+        12,
+        6
+      ],
+      "aa": "lanczos",
+      "ops": [
+        {
+          "gradient": {
+            "from": "#000510",
+            "to": "#001832",
+            "direction": "vertical"
+          }
+        }
+      ]
+    },
+    {
+      "res": [
+        36,
+        16
+      ],
+      "aa": "nearest",
+      "ops": [
+        {
+          "line": {
+            "x1": 3,
+            "y1": 3,
+            "x2": 10,
+            "y2": 7,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 10,
+            "y1": 7,
+            "x2": 18,
+            "y2": 3,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 10,
+            "y1": 7,
+            "x2": 15,
+            "y2": 12,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 15,
+            "y1": 12,
+            "x2": 22,
+            "y2": 5,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 22,
+            "y1": 5,
+            "x2": 28,
+            "y2": 10,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 28,
+            "y1": 10,
+            "x2": 33,
+            "y2": 13,
+            "color": "#152535"
+          }
+        },
+        {
+          "line": {
+            "x1": 15,
+            "y1": 12,
+            "x2": 7,
+            "y2": 14,
+            "color": "#152535"
+          }
+        },
+        {
+          "circle": {
+            "cx": 3,
+            "cy": 3,
+            "r": 1,
+            "color": "#f44"
+          }
+        },
+        {
+          "circle": {
+            "cx": 10,
+            "cy": 7,
+            "r": 2,
+            "color": "#ff8800"
+          }
+        },
+        {
+          "circle": {
+            "cx": 10,
+            "cy": 7,
+            "r": 1,
+            "color": "#ffcc44"
+          }
+        },
+        {
+          "circle": {
+            "cx": 15,
+            "cy": 12,
+            "r": 1,
+            "color": "#556"
+          }
+        },
+        {
+          "circle": {
+            "cx": 22,
+            "cy": 5,
+            "r": 1,
+            "color": "#fd4"
+          }
+        },
+        {
+          "circle": {
+            "cx": 28,
+            "cy": 10,
+            "r": 1,
+            "color": "#c8b4ff"
+          }
+        },
+        {
+          "circle": {
+            "cx": 33,
+            "cy": 13,
+            "r": 1,
+            "color": "#4f4"
+          }
+        },
+        {
+          "circle": {
+            "cx": 18,
+            "cy": 3,
+            "r": 1,
+            "color": "#4af"
+          }
+        },
+        {
+          "circle": {
+            "cx": 7,
+            "cy": 14,
+            "r": 1,
+            "color": "#556"
+          }
+        },
+        {
+          "triangle": {
+            "points": [
+              [
+                20,
+                6
+              ],
+              [
+                18,
+                8
+              ],
+              [
+                18,
+                4
+              ]
+            ],
+            "color": "#44eeff"
+          }
+        },
+        {
+          "triangle": {
+            "points": [
+              [
+                5,
+                5
+              ],
+              [
+                4,
+                7
+              ],
+              [
+                6,
+                7
+              ]
+            ],
+            "color": "#ff4444"
+          }
+        }
+      ]
+    },
+    {
+      "res": [
+        72,
+        32
+      ],
+      "aa": "nearest",
+      "ops": [
+        {
+          "scatter": {
+            "color": "#ffffff",
+            "count": 45,
+            "seed": 7
+          }
+        },
+        {
+          "scatter": {
+            "color": "#8888ff",
+            "count": 6,
+            "seed": 19
+          }
+        },
+        {
+          "pixel_text": {
+            "text": "VOID MERCHANTS",
+            "x": 8,
+            "y": 26,
+            "color": "#44eeff",
+            "shadow": "#001020"
+          }
+        }
+      ]
+    },
+    {
+      "res": [
+        18,
+        8
+      ],
+      "aa": "lanczos",
+      "opacity": 0.25,
+      "ops": [
+        {
+          "circle": {
+            "cx": 5,
+            "cy": 4,
+            "r": 3,
+            "color": "#ff660044"
+          }
+        },
+        {
+          "circle": {
+            "cx": 10,
+            "cy": 3,
+            "r": 2,
+            "color": "#22446644"
+          }
+        }
+      ]
+    },
+    {
+      "res": [
+        9,
+        4
+      ],
+      "aa": "lanczos",
+      "opacity": 0.08,
+      "ops": [
+        {
+          "dither": {
+            "color": "#1a2a5a",
+            "density": 0.2,
+            "seed": 42
+          }
+        }
+      ]
+    }
+  ]
+}
