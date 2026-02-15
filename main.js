@@ -38,11 +38,9 @@
     if (!text) return;
 
     var state = FA.getState();
-    state.narrativeMessage = { text: text.text, color: text.color, life: 4000, maxLife: 4000 };
-
-    if (FA.narrative) {
-      FA.narrative.transition(nodeId, text.text);
-    }
+    // Don't overlap — skip if a message is still visible
+    if (state.narrativeMessage && state.narrativeMessage.life > 1000) return;
+    state.narrativeMessage = { text: text.text, color: text.color, life: 5000, maxLife: 5000 };
   }
 
   // Fire a narrative trigger only once
@@ -70,7 +68,7 @@
       nearStation: -1,
       availableMissions: [],
       dockStation: null,
-      encounterCooldown: 8000,
+      encounterCooldown: 20000,
       selectionList: [],
       npcs: spawnSystemNPCs(Player.getCurrentSystem())
     });
@@ -92,47 +90,41 @@
     var npcs = [];
     var stations = Galaxy.getStations(systemId);
 
-    // Traders (1-3 based on population)
-    var traderCount = Math.min(3, Math.max(1, Math.floor(sys.population / 3)));
+    // Traders (1-2)
+    var traderCount = Math.min(2, Math.max(1, Math.floor(sys.population / 4)));
     for (var t = 0; t < traderCount; t++) {
       var tSt = stations.length > 0 ? stations[FA.rand(0, stations.length - 1)] : null;
       npcs.push({
         shipType: 'trader', faction: 'merchants',
-        x: FA.rand(-250, 250), y: FA.rand(-250, 250),
+        x: FA.rand(-400, 400), y: FA.rand(-400, 400),
         vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
-        targetX: tSt ? tSt.x : FA.rand(-200, 200),
-        targetY: tSt ? tSt.y : FA.rand(-200, 200),
+        targetX: tSt ? tSt.x : FA.rand(-300, 300),
+        targetY: tSt ? tSt.y : FA.rand(-300, 300),
+        speed: 1
+      });
+    }
+
+    // Faction patrol (1 in faction systems)
+    if (sys.faction && sys.faction !== 'pirates') {
+      npcs.push({
+        shipType: 'fighter', faction: sys.faction,
+        x: FA.rand(-300, 300), y: FA.rand(-300, 300),
+        vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
+        targetX: FA.rand(-400, 400), targetY: FA.rand(-400, 400),
         speed: 1.5
       });
     }
 
-    // Faction patrols (1-2 in faction systems)
-    if (sys.faction && sys.faction !== 'pirates') {
-      var patrolCount = FA.rand(1, 2);
-      for (var p = 0; p < patrolCount; p++) {
-        npcs.push({
-          shipType: 'fighter', faction: sys.faction,
-          x: FA.rand(-200, 200), y: FA.rand(-200, 200),
-          vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
-          targetX: FA.rand(-300, 300), targetY: FA.rand(-300, 300),
-          speed: 2
-        });
-      }
-    }
-
-    // Pirates (in dangerous systems)
-    if (sys.danger >= 2) {
-      var pirateCount = Math.min(2, sys.danger - 1);
-      for (var pi = 0; pi < pirateCount; pi++) {
-        var sign = Math.random() > 0.5 ? 1 : -1;
-        npcs.push({
-          shipType: 'fighter', faction: 'pirates',
-          x: FA.rand(200, 400) * sign, y: FA.rand(200, 400) * -sign,
-          vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
-          targetX: FA.rand(-200, 200), targetY: FA.rand(-200, 200),
-          speed: 2.5, hostile: true
-        });
-      }
+    // Pirate (ambient, 1 in dangerous systems)
+    if (sys.danger >= 3) {
+      var sign = Math.random() > 0.5 ? 1 : -1;
+      npcs.push({
+        shipType: 'fighter', faction: 'pirates',
+        x: FA.rand(300, 500) * sign, y: FA.rand(300, 500) * -sign,
+        vx: 0, vy: 0, angle: Math.random() * Math.PI * 2,
+        targetX: FA.rand(-400, 400), targetY: FA.rand(-400, 400),
+        speed: 1.5
+      });
     }
 
     return npcs;
@@ -141,17 +133,6 @@
   function updateNPCs(npcs, stations, player, dt) {
     for (var i = 0; i < npcs.length; i++) {
       var npc = npcs[i];
-
-      // Hostile pirates chase the player when close
-      if (npc.hostile) {
-        var pdx = player.x - npc.x;
-        var pdy = player.y - npc.y;
-        var pdist = Math.sqrt(pdx * pdx + pdy * pdy);
-        if (pdist < 200) {
-          npc.targetX = player.x;
-          npc.targetY = player.y;
-        }
-      }
 
       var dx = npc.targetX - npc.x;
       var dy = npc.targetY - npc.y;
@@ -609,52 +590,29 @@
       if (!Combat.isActive()) {
         state.encounterCooldown = (state.encounterCooldown || 0) - dt;
         if (state.encounterCooldown <= 0 && currentSysData.danger > 0) {
-          var encounterChance = currentSysData.danger * 0.0001;
+          var encounterChance = currentSysData.danger * 0.00003;
           if (Math.random() < encounterChance) {
-            var enemyCount = FA.rand(1, Math.min(2, currentSysData.danger));
-            var enemies = [];
-            for (var e = 0; e < enemyCount; e++) {
-              enemies.push({
-                shipType: 'fighter',
-                faction: 'pirates',
-                ai: 'aggressive',
-                weapons: ['laser']
-              });
+            var enemies = [{
+              shipType: 'fighter',
+              faction: 'pirates',
+              ai: currentSysData.danger >= 3 ? 'aggressive' : 'defensive',
+              weapons: ['laser']
+            }];
+            if (currentSysData.danger >= 4) {
+              enemies.push({ shipType: 'fighter', faction: 'pirates', ai: 'aggressive', weapons: ['laser'] });
             }
             Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
-            state.encounterCooldown = 8000;
+            state.encounterCooldown = 20000;
             triggerNarrative('pirate_encounter', 'pirate_encounter');
           } else {
-            state.encounterCooldown = 1000;
+            state.encounterCooldown = 5000;
           }
         }
       }
 
-      // Update NPCs
+      // Update NPCs (ambient, no combat triggers)
       if (state.npcs && state.npcs.length > 0) {
         updateNPCs(state.npcs, stations, player, dt);
-
-        // Hostile NPC proximity → combat trigger (only when not in combat)
-        if (!Combat.isActive()) {
-          for (var ni = state.npcs.length - 1; ni >= 0; ni--) {
-            var npc = state.npcs[ni];
-            if (!npc.hostile) continue;
-            var ndx = player.x - npc.x;
-            var ndy = player.y - npc.y;
-            var ndist = Math.sqrt(ndx * ndx + ndy * ndy);
-            if (ndist < 80) {
-              var pirateShip = state.npcs.splice(ni, 1)[0];
-              var enemies = [{ shipType: pirateShip.shipType, faction: 'pirates', ai: 'aggressive', weapons: ['laser'] }];
-              if (currentSysData.danger >= 3 && Math.random() < 0.5) {
-                enemies.push({ shipType: 'fighter', faction: 'pirates', ai: 'aggressive', weapons: ['laser'] });
-              }
-              Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
-              state.encounterCooldown = 8000;
-              triggerNarrative('pirate_encounter', 'pirate_encounter');
-              break;
-            }
-          }
-        }
       }
 
       // Combat update (combat happens in system view)
