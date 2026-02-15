@@ -241,31 +241,31 @@
 
       if (aiType === 'aggressive' || (aiType === 'coward' && enemy.hull >= enemy.maxHull * 0.3)) {
         // Fly toward player
-        shouldThrust = distToPlayer > 80;
+        shouldThrust = distToPlayer > 120;
         // Fire when aimed and close
-        shouldFire = absAngleDiff < 0.3 && distToPlayer < 350;
+        shouldFire = absAngleDiff < 0.2 && distToPlayer < 300;
       } else if (aiType === 'defensive') {
-        // Try to keep ~200px distance
-        if (distToPlayer > 250) {
+        // Try to keep ~250px distance
+        if (distToPlayer > 300) {
           shouldThrust = true;
-        } else if (distToPlayer < 150) {
+        } else if (distToPlayer < 180) {
           // Back off: add perpendicular movement (circling)
-          enemy.angle += 0.02 * dt;
+          enemy.angle += 0.015 * dt;
           shouldThrust = true;
         } else {
           // Circle at optimal distance
-          enemy.angle += 0.015 * dt;
+          enemy.angle += 0.01 * dt;
           shouldThrust = true;
         }
         // Fire when aimed
-        shouldFire = absAngleDiff < 0.3 && distToPlayer < 400;
+        shouldFire = absAngleDiff < 0.2 && distToPlayer < 350;
       }
     }
 
     // Apply thrust
     if (shouldThrust) {
-      enemy.vx += Math.sin(enemy.angle) * enemy.speed * 0.03;
-      enemy.vy -= Math.cos(enemy.angle) * enemy.speed * 0.03;
+      enemy.vx += Math.sin(enemy.angle) * enemy.speed * 0.02;
+      enemy.vy -= Math.cos(enemy.angle) * enemy.speed * 0.02;
     }
 
     // Friction
@@ -286,7 +286,7 @@
       var weaponDef = FA.lookup('weaponTypes', weaponId);
       if (weaponDef) {
         spawnProjectile(enemy, weaponId, false);
-        enemy.cooldown = weaponDef.cooldown * 3;
+        enemy.cooldown = weaponDef.cooldown * 4;
       }
     }
   }

@@ -102,38 +102,38 @@
 
   // === SHIP TYPES ===
   FA.register('shipTypes', 'shuttle', {
-    name: 'Shuttle', maxHull: 30, maxShield: 10, maxCargo: 10, maxFuel: 80,
+    name: 'Shuttle', maxHull: 40, maxShield: 15, maxCargo: 10, maxFuel: 80,
     speed: 4, turnSpeed: 0.003, weaponSlots: 1, price: 0, char: 'S'
   });
   FA.register('shipTypes', 'trader', {
-    name: 'Trader', maxHull: 50, maxShield: 20, maxCargo: 40, maxFuel: 150,
+    name: 'Trader', maxHull: 70, maxShield: 25, maxCargo: 40, maxFuel: 150,
     speed: 3, turnSpeed: 0.0025, weaponSlots: 1, price: 5000, char: 'T'
   });
   FA.register('shipTypes', 'fighter', {
-    name: 'Fighter', maxHull: 40, maxShield: 30, maxCargo: 10, maxFuel: 120,
+    name: 'Fighter', maxHull: 50, maxShield: 40, maxCargo: 10, maxFuel: 120,
     speed: 6, turnSpeed: 0.005, weaponSlots: 3, price: 8000, char: 'F'
   });
   FA.register('shipTypes', 'corvette', {
-    name: 'Corvette', maxHull: 80, maxShield: 50, maxCargo: 25, maxFuel: 200,
+    name: 'Corvette', maxHull: 100, maxShield: 60, maxCargo: 25, maxFuel: 200,
     speed: 4, turnSpeed: 0.003, weaponSlots: 4, price: 15000, char: 'C'
   });
   FA.register('shipTypes', 'freighter', {
-    name: 'Freighter', maxHull: 100, maxShield: 30, maxCargo: 80, maxFuel: 250,
+    name: 'Freighter', maxHull: 130, maxShield: 35, maxCargo: 80, maxFuel: 250,
     speed: 2, turnSpeed: 0.002, weaponSlots: 2, price: 20000, char: 'H'
   });
 
   // === WEAPON TYPES ===
   FA.register('weaponTypes', 'laser', {
-    name: 'Pulse Laser', damage: 5, cooldown: 200, speed: 8, range: 120, color: '#0ff', price: 500, char: '|'
+    name: 'Pulse Laser', damage: 4, cooldown: 500, speed: 5, range: 150, color: '#0ff', price: 500, char: '|'
   });
   FA.register('weaponTypes', 'cannon', {
-    name: 'Cannon', damage: 15, cooldown: 600, speed: 6, range: 100, color: '#fa0', price: 1500, char: 'o'
+    name: 'Cannon', damage: 10, cooldown: 1500, speed: 4, range: 120, color: '#fa0', price: 1500, char: 'o'
   });
   FA.register('weaponTypes', 'missile', {
-    name: 'Missile', damage: 30, cooldown: 1200, speed: 5, range: 180, color: '#f44', price: 3000, char: '*'
+    name: 'Missile', damage: 20, cooldown: 3000, speed: 3, range: 220, color: '#f44', price: 3000, char: '*'
   });
   FA.register('weaponTypes', 'beam', {
-    name: 'Mining Beam', damage: 2, cooldown: 100, speed: 10, range: 80, color: '#4f4', price: 800, char: ':'
+    name: 'Mining Beam', damage: 2, cooldown: 200, speed: 7, range: 100, color: '#4f4', price: 800, char: ':'
   });
 
   // === FACTIONS ===
