@@ -219,12 +219,12 @@
 
     // Chase if far, circle if close
     if (dist > 200) {
-      npc.vx += Math.sin(npc.angle) * npc.speed * 0.02;
-      npc.vy -= Math.cos(npc.angle) * npc.speed * 0.02;
+      npc.vx += Math.sin(npc.angle) * npc.speed * 0.01;
+      npc.vy -= Math.cos(npc.angle) * npc.speed * 0.01;
     } else if (dist < 150) {
       npc.angle += 0.01 * dt;
-      npc.vx += Math.sin(npc.angle) * npc.speed * 0.015;
-      npc.vy -= Math.cos(npc.angle) * npc.speed * 0.015;
+      npc.vx += Math.sin(npc.angle) * npc.speed * 0.008;
+      npc.vy -= Math.cos(npc.angle) * npc.speed * 0.008;
     }
 
     // Fire when aimed and in range
@@ -271,8 +271,8 @@
     else if (angleDiff < -turnRate) npc.angle -= turnRate;
     else npc.angle = desiredAngle;
 
-    npc.vx += Math.sin(npc.angle) * npc.speed * 0.01;
-    npc.vy -= Math.cos(npc.angle) * npc.speed * 0.01;
+    npc.vx += Math.sin(npc.angle) * npc.speed * 0.005;
+    npc.vy -= Math.cos(npc.angle) * npc.speed * 0.005;
 
     npc.vx *= 0.99;
     npc.vy *= 0.99;
@@ -665,12 +665,12 @@
         player.angle += player.turnSpeed * dt;
       }
       if (FA.isHeld('up')) {
-        player.vx += Math.sin(player.angle) * player.speed * 0.04;
-        player.vy -= Math.cos(player.angle) * player.speed * 0.04;
+        player.vx += Math.sin(player.angle) * player.speed * 0.02;
+        player.vy -= Math.cos(player.angle) * player.speed * 0.02;
       }
       if (FA.isHeld('down')) {
-        player.vx -= Math.sin(player.angle) * player.speed * 0.015;
-        player.vy += Math.cos(player.angle) * player.speed * 0.015;
+        player.vx -= Math.sin(player.angle) * player.speed * 0.008;
+        player.vy += Math.cos(player.angle) * player.speed * 0.008;
       }
 
       // Star gravity — pull player toward center (0,0)
