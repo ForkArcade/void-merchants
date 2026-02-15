@@ -314,6 +314,47 @@
         }
       }
 
+      // Draw NPCs
+      var npcs = FA.getState().npcs || [];
+      for (var ni = 0; ni < npcs.length; ni++) {
+        var npc = npcs[ni];
+        var nx = npc.x - camX;
+        var ny = npc.y - camY;
+
+        // Skip if off-screen
+        if (nx < -50 || nx > W + 50 || ny < -50 || ny > H + 50) continue;
+
+        // NPC faction color
+        var npcColor = '#888';
+        if (npc.faction) {
+          var npcFac = FA.lookup('factions', npc.faction);
+          if (npcFac) npcColor = npcFac.color;
+        }
+
+        // NPC sprite name based on faction
+        var npcSpriteName = npc.faction === 'pirates' ? 'pirate' :
+                            npc.faction === 'federation' ? 'militaryPatrol' :
+                            npc.faction === 'rebels' ? 'rebelFighter' :
+                            npc.faction === 'scientists' ? 'bountyHunter' :
+                            npc.faction === 'merchants' ? 'merchantCruiser' : 'pirate';
+        var npcSize = npc.shipType === 'trader' ? 18 : 20;
+
+        drawRotatedSprite(ctx, 'enemies', npcSpriteName, nx, ny, npc.angle || 0, npcSize, function(c) {
+          c.beginPath();
+          c.moveTo(0, -8);
+          c.lineTo(-5, 6);
+          c.lineTo(5, 6);
+          c.closePath();
+          c.fillStyle = npcColor;
+          c.fill();
+        });
+
+        // Faction label
+        if (npc.faction) {
+          FA.draw.text(npc.faction.charAt(0).toUpperCase(), nx, ny + npcSize / 2 + 6, { color: npcColor, size: 8, align: 'center', baseline: 'top' });
+        }
+      }
+
       // Draw player ship
       var px = player.x - camX;
       var py = player.y - camY;
