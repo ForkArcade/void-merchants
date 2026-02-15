@@ -1,0 +1,46 @@
+{
+  "style": "Dark space pixel art — deep black backgrounds, neon-colored ship outlines, glowing engines, holographic UI elements",
+  "gridSize": "8x8",
+  "palette": {
+    "space-bg": "#000a14",
+    "star-dim": "#334455",
+    "star-bright": "#ffffff",
+    "player-hull": "#44eeff",
+    "player-engine": "#4488ff",
+    "enemy-hull": "#ff8844",
+    "enemy-engine": "#ff4444",
+    "friendly-hull": "#44ff44",
+    "station-body": "#8888aa",
+    "station-light": "#ffd444",
+    "laser-blue": "#00ffff",
+    "laser-red": "#ff4444",
+    "missile-orange": "#ffaa00",
+    "explosion": "#ff8800",
+    "shield-glow": "#44ffff",
+    "credits-gold": "#ffd444",
+    "fuel-blue": "#4488ff",
+    "cargo-crate": "#aa8844"
+  },
+  "categories": {
+    "player": {
+      "sprites": ["shuttle", "trader", "fighter", "corvette", "freighter"],
+      "desc": "Player ship variants — one per ship type, top-down view, facing up"
+    },
+    "enemies": {
+      "sprites": ["pirate", "pirateHeavy", "militaryPatrol", "rebelFighter", "bountyHunter"],
+      "desc": "Enemy ship sprites — distinct silhouettes by faction and role"
+    },
+    "effects": {
+      "sprites": ["laser", "missile", "explosion", "shieldHit", "engineFlame", "jumpFlash"],
+      "desc": "Combat and travel effects — projectiles, explosions, engine glow, hyperspace flash"
+    },
+    "items": {
+      "sprites": ["cargoPod", "fuelCell", "artifact", "beacon", "wreckage"],
+      "desc": "Collectible items floating in space — cargo, fuel, quest items"
+    },
+    "ui": {
+      "sprites": ["station", "starSmall", "starLarge", "planet", "jumpGate", "missionIcon", "tradeIcon", "combatIcon"],
+      "desc": "Galaxy map and HUD icons — stations, stars, planets, navigation markers"
+    }
+  }
+}

@@ -1,0 +1,161 @@
+# Space Trader — Game Design Prompt
+
+You are creating a Space Trader game for the ForkArcade platform. An open-world space exploration game inspired by Frontier: Elite 2 (trading, combat, open galaxy) and Mercenary (story-driven factions, missions, narrative choices).
+
+## File architecture
+
+```
+forkarcade-sdk.js   — PLATFORM: SDK (do not modify)
+fa-narrative.js     — PLATFORM: narrative module (do not modify)
+sprites.js          — generated from _sprites.json (do not modify manually)
+fa-engine.js        — ENGINE: game loop, event bus, state, registry, seeded RNG, galaxy gen (do not modify)
+fa-renderer.js      — ENGINE: canvas, layers, draw helpers (do not modify)
+fa-input.js         — ENGINE: keyboard/mouse, keybindings (do not modify)
+fa-audio.js         — ENGINE: Web Audio, sounds (do not modify)
+data.js             — GAME DATA: config, commodities, ships, weapons, factions, sounds, narrative
+galaxy.js           — GALAXY: procedural generation, stations, economy simulation
+player.js           — PLAYER: ship state, cargo, fuel, credits, reputation, missions
+combat.js           — COMBAT: real-time weapons, projectiles, shields, AI
+render.js           — RENDERING: all views (galaxy map, system, station, combat, HUD)
+main.js             — ENTRY POINT: keybindings, view state machine, game loop, SDK
+```
+
+**You only modify: data.js, galaxy.js, player.js, combat.js, render.js, main.js.**
+
+## Game views (state machine)
+
+The game has 6 views, managed by `state.view`:
+
+### 1. Galaxy Map (`view: 'galaxy_map'`)
+- Top-down view of the entire galaxy (40 star systems)
+- Systems shown as circles colored by controlling faction
+- Lines connecting systems that have hyperspace routes
+- Dashed circle showing fuel range from current position
+- Click/arrow keys to select system, ENTER to jump (consumes fuel)
+- Display: system name, economy type, danger level, trade route profitability
+- M key toggles between galaxy map and system view
+
+### 2. System View (`view: 'system_view'`)
+- Real-time 2D view of current star system
+- Central star, orbiting stations, NPC ships, player ship
+- WASD for flight (real-time, FA.isHeld), approach stations to dock
+- Random encounters: pirate attacks, distress signals, patrol checks
+- SPACE near station to dock (enter station menu)
+- M to go back to galaxy map
+
+### 3. Station (`view: 'station'`)
+- Menu-based interface (not real-time flight)
+- 5 tabs navigated with number keys 1-5:
+  - 1: Trade — commodity list with buy/sell prices, quantity selector
+  - 2: Shipyard — available ships, weapon upgrades
+  - 3: Fuel — refuel at local price
+  - 4: Missions — available missions from local factions
+  - 5: Repair — hull repair, shield maintenance
+- Arrow keys navigate within tab, ENTER to confirm, ESC to undock
+
+### 4. Combat (`view: 'combat'`)
+- Real-time combat in bounded arena
+- WASD = thrust/turn, SPACE = fire, Shift = boost, F = flee
+- Player ship + enemy ships with hull, shields, weapons
+- Projectile physics: speed, range, cooldown per weapon type
+- Shield absorbs damage first, then hull
+- Victory: collect loot (credits, cargo, reputation)
+- Defeat: game over screen
+
+### 5. Victory (`view: 'victory'`)
+- Achieved by completing the main storyline (delivering the artifact)
+- Final score, narrative text, stats
+
+### 6. Defeat (`view: 'defeat'`)
+- Hull reaches 0, or stranded without fuel (no reachable systems)
+- Score breakdown, [R] restart
+
+## Key mechanics
+
+### Trading
+- 8 commodity types with economy-dependent pricing
+- Agricultural systems: cheap food, expensive electronics
+- Mining systems: cheap minerals, expensive machinery
+- Price formula: `basePrice * economyMod * (0.8 + fluctuation * 0.4) * (1 + danger * 0.05)`
+- Fluctuation: deterministic sine wave per system (period ~5 min game time)
+- Buy low in source economies, sell high in demand economies
+- Illegal goods (narcotics): high profit, but faction rep penalty if caught
+
+### Ships
+- 5 ship types: shuttle (starter), trader, fighter, corvette, freighter
+- Stats: hull, shields, cargo capacity, fuel tank, speed, weapon slots
+- Buy at shipyard (old ship traded in at 50% value)
+- Ship type affects combat, trade capacity, and fuel range
+
+### Combat
+- Real-time 2D top-down combat
+- Player ship has hull + shield. Shield recharges slowly.
+- 4 weapon types: pulse laser, cannon, missile, mining beam
+- Enemy AI: 3 behavior patterns (aggressive, defensive, coward)
+- Loot on victory: credits + random cargo + faction reputation
+- Flee option: costs fuel, chance based on speed comparison
+
+### Factions
+- 5 factions control different regions of the galaxy
+- Reputation per faction: -100 (hostile) to +100 (allied)
+- Rep affects: prices (±10% at extremes), mission availability, hostility
+- Actions that change rep: trading, completing missions, combat, smuggling
+- At rep < -50: faction ships attack on sight
+- At rep > 50: faction offers exclusive missions and better prices
+
+### Missions
+- Generated by factions at stations in their territory
+- Types:
+  - Delivery: transport cargo to another system (reward: credits + rep)
+  - Combat: destroy N pirates in a system (reward: credits + rep)
+  - Smuggling: deliver illegal goods (high reward, rep risk)
+  - Exploration: visit a specific system (reward: credits + rep)
+  - Story: main plot missions (unique, advance narrative)
+- Missions have deadlines (game-time) — fail if expired
+- Max 3 active missions
+
+### Fuel
+- Fuel consumed per jump (proportional to distance)
+- Refuel at stations (price varies by economy)
+- Running out of fuel = stranded — if no station in system, game over
+- Fuel range circle on galaxy map shows reachable systems
+
+## Scoring
+
+```
+score = creditsEarned * 1
+      + systemsVisited * 50
+      + missionsCompleted * 200
+      + kills * 100
+      + floor(gameTimeMinutes) * 10
+      + (artifactDelivered ? 5000 : 0)
+```
+
+`ForkArcade.submitScore(score)` in the `game:over` handler.
+
+## Narrative
+
+Mercenary-inspired story in 4 acts:
+1. **Arrival**: Emergency landing, first trades, first jumps
+2. **Factions**: Meet Federation, Pirates, Merchants, Rebels. Side quests (distress signal, smuggling offer). Choose allegiance.
+3. **The Artifact**: Rumors of alien artifact → find it → hunted by everyone → decision (science or power)
+4. **Climax**: Pirate King boss fight → final run → delivery → ending
+
+Trigger transitions based on game events (first trade, first jump, systems visited, reputation thresholds, mission completion). Use `showNarrative(nodeId)` pattern for display + transition.
+
+## Rendering tips
+- Galaxy map: simple circles + lines, text labels, no camera transform (fixed view with offset + scale)
+- System view: camera follows player ship (`FA.camera`). Star at center, stations orbit at fixed radii.
+- Station: full-screen menu overlay with panels, no camera
+- Combat: camera follows player, bounded arena
+- Star background: scatter random dots per system, parallax optional
+- HUD: fixed position (no camera transform), semi-transparent panels
+- Every gameplay layer MUST guard with `if (state.screen !== 'playing') return;`
+
+## What to avoid
+- 3D rendering (this is 2D top-down)
+- Complex inventory UI (keep menus simple: lists with arrow key navigation)
+- AI pathfinding in galaxy (NPCs exist only in system view and combat)
+- Modifying ENGINE files (fa-*.js)
+- Blocking animations in the game loop
+- Turn-based mechanics (combat and flight are real-time)

@@ -1,0 +1,56 @@
+{
+  "default": "dark-neon",
+  "styles": {
+    "dark-neon": {
+      "name": "Dark Neon",
+      "description": "Deep space black with neon accents — cyberpunk cockpit feel",
+      "font": {
+        "family": "Orbitron",
+        "url": "https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap",
+        "fallback": "monospace"
+      },
+      "palette": {
+        "bg": "#000000",
+        "canvas-bg": "#000a14",
+        "text": "#ffffff",
+        "accent": "#44eeff",
+        "accent2": "#ffd444",
+        "ui-border": "#112244"
+      }
+    },
+    "retro-amber": {
+      "name": "Retro Amber",
+      "description": "Amber phosphor on black — 80s space sim terminal aesthetic",
+      "font": {
+        "family": "VT323",
+        "url": "https://fonts.googleapis.com/css2?family=VT323&display=swap",
+        "fallback": "monospace"
+      },
+      "palette": {
+        "bg": "#000000",
+        "canvas-bg": "#0a0800",
+        "text": "#ffaa00",
+        "accent": "#ff8800",
+        "accent2": "#ffcc44",
+        "ui-border": "#332200"
+      }
+    },
+    "frontier-blue": {
+      "name": "Frontier Blue",
+      "description": "Classic Elite-inspired blue wireframe look — clean and technical",
+      "font": {
+        "family": "Share Tech Mono",
+        "url": "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap",
+        "fallback": "monospace"
+      },
+      "palette": {
+        "bg": "#000010",
+        "canvas-bg": "#000820",
+        "text": "#88aaff",
+        "accent": "#4488ff",
+        "accent2": "#88ccff",
+        "ui-border": "#112255"
+      }
+    }
+  }
+}
