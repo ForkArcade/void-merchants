@@ -16,8 +16,15 @@
   ],
   "slug": "void-merchants",
   "title": "Void Merchants",
-  "currentVersion": 0,
-  "versions": [],
+  "currentVersion": 1,
+  "versions": [
+    {
+      "version": 1,
+      "date": "2026-02-15",
+      "issue": null,
+      "description": "Initial release"
+    }
+  ],
   "sdkVersion": 1,
   "style": "dark-neon",
   "fontFamily": "Orbitron, monospace"

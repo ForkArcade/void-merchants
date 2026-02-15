@@ -1,0 +1,13 @@
+/* ForkArcade style: dark-neon */
+:root {
+  --fa-bg: #000000;
+  --fa-canvas-bg: #000a14;
+  --fa-text: #ffffff;
+  --fa-accent: #44eeff;
+  --fa-accent2: #ffd444;
+  --fa-ui-border: #112244;
+  --fa-font: 'Orbitron', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--fa-bg, #000); display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: var(--fa-font); }
+canvas { background: var(--fa-canvas-bg, #001122); }
