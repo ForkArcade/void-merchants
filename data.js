@@ -103,23 +103,23 @@
   // === SHIP TYPES ===
   FA.register('shipTypes', 'shuttle', {
     name: 'Shuttle', maxHull: 30, maxShield: 10, maxCargo: 10, maxFuel: 80,
-    speed: 4, turnSpeed: 0.05, weaponSlots: 1, price: 0, char: 'S'
+    speed: 4, turnSpeed: 0.012, weaponSlots: 1, price: 0, char: 'S'
   });
   FA.register('shipTypes', 'trader', {
     name: 'Trader', maxHull: 50, maxShield: 20, maxCargo: 40, maxFuel: 150,
-    speed: 3, turnSpeed: 0.04, weaponSlots: 1, price: 5000, char: 'T'
+    speed: 3, turnSpeed: 0.010, weaponSlots: 1, price: 5000, char: 'T'
   });
   FA.register('shipTypes', 'fighter', {
     name: 'Fighter', maxHull: 40, maxShield: 30, maxCargo: 10, maxFuel: 120,
-    speed: 6, turnSpeed: 0.07, weaponSlots: 3, price: 8000, char: 'F'
+    speed: 6, turnSpeed: 0.018, weaponSlots: 3, price: 8000, char: 'F'
   });
   FA.register('shipTypes', 'corvette', {
     name: 'Corvette', maxHull: 80, maxShield: 50, maxCargo: 25, maxFuel: 200,
-    speed: 4, turnSpeed: 0.05, weaponSlots: 4, price: 15000, char: 'C'
+    speed: 4, turnSpeed: 0.012, weaponSlots: 4, price: 15000, char: 'C'
   });
   FA.register('shipTypes', 'freighter', {
     name: 'Freighter', maxHull: 100, maxShield: 30, maxCargo: 80, maxFuel: 250,
-    speed: 2, turnSpeed: 0.03, weaponSlots: 2, price: 20000, char: 'H'
+    speed: 2, turnSpeed: 0.008, weaponSlots: 2, price: 20000, char: 'H'
   });
 
   // === WEAPON TYPES ===
