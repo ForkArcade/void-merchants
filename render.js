@@ -685,18 +685,18 @@
           var sx = ((s.x - camX * 0.3) % (W * 3) + W * 3) % (W * 3) - W;
           var sy = ((s.y - camY * 0.3) % (H * 3) + H * 3) % (H * 3) - H;
           if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
-          FA.draw.withAlpha(s.brightness * 0.5, function() {
-            FA.draw.circle(sx, sy, s.size, colors.starfield);
-          });
+          FA.draw.pushAlpha(s.brightness * 0.5);
+          FA.draw.circle(sx, sy, s.size, colors.starfield);
+          FA.draw.popAlpha();
         }
       }
 
       // Arena boundary lines (dim)
       var arenaW = cfg.combatArenaWidth;
       var arenaH = cfg.combatArenaHeight;
-      FA.draw.withAlpha(0.15, function() {
-        FA.draw.strokeRect(-camX, -camY, arenaW, arenaH, '#446', 2);
-      });
+      FA.draw.pushAlpha(0.15);
+      FA.draw.strokeRect(-camX, -camY, arenaW, arenaH, '#446', 2);
+      FA.draw.popAlpha();
     }, 30);
 
     // ========== LAYER: Combat Ships (order 31) — disabled ==========
@@ -764,30 +764,30 @@
           if (explSprite) {
             var explFrame = alpha > 0.5 ? 0 : 1;
             var explSize = 16 + (1 - alpha) * 24;
-            FA.draw.withAlpha(alpha, function() {
-              drawSprite(ctx, explSprite, ex - explSize / 2, ey - explSize / 2, explSize, explFrame);
-            });
+            FA.draw.pushAlpha(alpha);
+            drawSprite(ctx, explSprite, ex - explSize / 2, ey - explSize / 2, explSize, explFrame);
+            FA.draw.popAlpha();
           } else {
             var radius = (1 - alpha) * (eff.radius || 20);
-            FA.draw.withAlpha(alpha, function() {
-              FA.draw.circle(ex, ey, radius, eff.color || '#f84');
-            });
+            FA.draw.pushAlpha(alpha);
+            FA.draw.circle(ex, ey, radius, eff.color || '#f84');
+            FA.draw.popAlpha();
           }
         } else if (eff.type === 'shieldHit') {
           var shieldSprite = typeof getSprite === 'function' && getSprite('effects', 'shieldHit');
           if (shieldSprite) {
-            FA.draw.withAlpha(alpha * 0.6, function() {
-              drawSprite(ctx, shieldSprite, ex - 12, ey - 12, 24);
-            });
+            FA.draw.pushAlpha(alpha * 0.6);
+            drawSprite(ctx, shieldSprite, ex - 12, ey - 12, 24);
+            FA.draw.popAlpha();
           } else {
-            FA.draw.withAlpha(alpha * 0.6, function() {
-              FA.draw.strokeCircle(ex, ey, eff.radius || 18, '#4ff', 2);
-            });
+            FA.draw.pushAlpha(alpha * 0.6);
+            FA.draw.strokeCircle(ex, ey, eff.radius || 18, '#4ff', 2);
+            FA.draw.popAlpha();
           }
         } else {
-          FA.draw.withAlpha(alpha, function() {
-            FA.draw.circle(ex, ey, 2, eff.color || '#fff');
-          });
+          FA.draw.pushAlpha(alpha);
+          FA.draw.circle(ex, ey, 2, eff.color || '#fff');
+          FA.draw.popAlpha();
         }
       }
 
