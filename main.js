@@ -179,7 +179,7 @@
       var currentSys = Player.getCurrentSystem();
       var connections = Galaxy.getSystem(currentSys).connections;
 
-      if (data.action === 'back') {
+      if (data.action === 'back' || data.action === 'map') {
         state.view = 'system_view';
         state.selectedSystem = null;
         return;

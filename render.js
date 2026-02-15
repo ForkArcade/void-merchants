@@ -855,6 +855,16 @@
       if (missions.length > 0) {
         FA.draw.text(missions[0].title, W - 15, H - 32, { color: '#c8b4ff', size: 10, align: 'right' });
       }
+
+      // Control hints per view
+      var hint = '';
+      if (state.view === 'galaxy_map') hint = 'Arrows: select system | ENTER: jump | M: close map';
+      else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: dock (near station) | M: galaxy map';
+      else if (state.view === 'combat') hint = 'WASD: fly | SPACE: shoot | F: flee';
+      else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | ESC: sell/undock';
+      if (hint) {
+        FA.draw.text(hint, W / 2, H - 12, { color: '#556', size: 10, align: 'center' });
+      }
     }, 40);
 
     // ========== LAYER: Narrative Bar (order 45) ==========
