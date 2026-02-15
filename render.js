@@ -309,7 +309,7 @@
         var dx = player.x - st.x;
         var dy = player.y - st.y;
         var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 60 && !Combat.isActive()) {
+        if (dist < 60) {
           FA.draw.text('SPACE to dock', stx, sty - 18, { color: '#4ef', size: 11, bold: true, align: 'center', baseline: 'middle' });
         }
       }
@@ -324,12 +324,9 @@
         // Skip if off-screen
         if (nx < -50 || nx > W + 50 || ny < -50 || ny > H + 50) continue;
 
-        // NPC faction color
-        var npcColor = '#888';
-        if (npc.faction) {
-          var npcFac = FA.lookup('factions', npc.faction);
-          if (npcFac) npcColor = npcFac.color;
-        }
+        // Color based on attitude
+        var npcColor = npc.attitude === 'hostile' ? '#f44' :
+                       npc.attitude === 'friendly' ? '#4f4' : '#888';
 
         // NPC sprite name based on faction
         var npcSpriteName = npc.faction === 'pirates' ? 'pirate' :
@@ -349,9 +346,15 @@
           c.fill();
         });
 
-        // Faction label
-        if (npc.faction) {
-          FA.draw.text(npc.faction.charAt(0).toUpperCase(), nx, ny + npcSize / 2 + 6, { color: npcColor, size: 8, align: 'center', baseline: 'top' });
+        // Health bar + shield for hostile NPCs
+        if (npc.attitude === 'hostile') {
+          var hpR = npc.hull / (npc.maxHull || 1);
+          FA.draw.bar(nx - 15, ny - 18, 30, 3, hpR, hpR > 0.3 ? '#f84' : '#f44', '#222');
+          if (npc.shield > 0) {
+            FA.draw.withAlpha((npc.shield / (npc.maxShield || 1)) * 0.4, function() {
+              FA.draw.strokeCircle(nx, ny, 15, '#8ff', 1);
+            });
+          }
         }
       }
 
@@ -392,8 +395,8 @@
         c.fill();
       });
 
-      // Shield glow during combat
-      if (Combat.isActive() && player.shield > 0) {
+      // Shield glow when damaged
+      if (player.shield > 0 && player.shield < player.maxShield) {
         var shieldAlpha = (player.shield / player.maxShield) * 0.5;
         FA.draw.withAlpha(shieldAlpha, function() {
           FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
@@ -687,62 +690,15 @@
       });
     }, 30);
 
-    // ========== LAYER: Combat Ships (order 31) ==========
+    // ========== LAYER: Combat Ships (order 31) — disabled ==========
     FA.addLayer('combatShips', function() {
-      var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'system_view' || !Combat.isActive()) return;
-
-      var camX = FA.camera.x;
-      var camY = FA.camera.y;
-      var ctx = FA.getCtx();
-
-      // Draw combat enemies
-      var enemies = Combat.getEnemies();
-      for (var e = 0; e < enemies.length; e++) {
-        var en = enemies[e];
-        var ex = en.x - camX;
-        var ey = en.y - camY;
-
-        // Enemy faction color
-        var eColor = colors.enemyShip;
-        if (en.faction) {
-          var eFac = FA.lookup('factions', en.faction);
-          if (eFac) eColor = eFac.color;
-        }
-
-        // Enemy sprite or fallback triangle
-        var enemySpriteName = en.faction === 'pirates' ? (en.shipType === 'corvette' ? 'pirateHeavy' : 'pirate') :
-                              en.faction === 'federation' ? 'militaryPatrol' :
-                              en.faction === 'rebels' ? 'rebelFighter' :
-                              en.faction === 'scientists' ? 'bountyHunter' : 'pirate';
-        drawRotatedSprite(ctx, 'enemies', enemySpriteName, ex, ey, en.angle || 0, SHIP_SIZE, function(c) {
-          c.beginPath();
-          c.moveTo(0, -10);
-          c.lineTo(-7, 7);
-          c.lineTo(7, 7);
-          c.closePath();
-          c.fillStyle = eColor;
-          c.fill();
-        });
-
-        // Health bar above enemy
-        var hpRatio = en.hull / (en.maxHull || 1);
-        FA.draw.bar(ex - 15, ey - 20, 30, 4, hpRatio, hpRatio > 0.3 ? '#f84' : '#f44', '#222');
-
-        // Shield indicator
-        if (en.shield > 0) {
-          var esAlpha = (en.shield / (en.maxShield || 1)) * 0.4;
-          FA.draw.withAlpha(esAlpha, function() {
-            FA.draw.strokeCircle(ex, ey, 15, '#8ff', 1);
-          });
-        }
-      }
+      return; // NPCs rendered in systemViewObjects
     }, 31);
 
     // ========== LAYER: Combat Projectiles (order 32) ==========
     FA.addLayer('combatProjectiles', function() {
       var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'system_view' || !Combat.isActive()) return;
+      if (state.screen !== 'playing' || state.view !== 'system_view') return;
 
       var projectiles = Combat.getProjectiles();
       var camX = FA.camera.x;
@@ -844,13 +800,6 @@
         FA.draw.text(curSys.economy, 15, 28, { color: colors.hud, size: 10 });
       }
 
-      // Combat indicator
-      if (Combat.isActive()) {
-        var combatEnemies = Combat.getEnemies();
-        FA.draw.text('COMBAT', W / 2, 12, { color: '#f44', size: 14, bold: true, align: 'center' });
-        FA.draw.text('Enemies: ' + combatEnemies.length + ' | F to flee', W / 2, 28, { color: '#f84', size: 11, align: 'center' });
-      }
-
       // Top-right: credits
       FA.draw.text(player.credits + ' cr', W - 15, 12, { color: colors.credits, size: 14, bold: true, align: 'right' });
 
@@ -882,8 +831,7 @@
       // Control hints per view
       var hint = '';
       if (state.view === 'galaxy_map') hint = 'Arrows: select system | ENTER: jump | M: close map';
-      else if (state.view === 'system_view' && Combat.isActive()) hint = 'WASD: fly | SPACE: shoot | F: flee';
-      else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: dock (near station) | M: galaxy map';
+      else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: shoot / dock | M: galaxy map';
       else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | ESC: sell/undock';
       if (hint) {
         FA.draw.text(hint, W / 2, H - 12, { color: '#556', size: 10, align: 'center' });

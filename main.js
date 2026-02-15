@@ -76,7 +76,8 @@
       nearStation: -1,
       availableMissions: [],
       dockStation: null,
-      selectionList: []
+      selectionList: [],
+      npcs: spawnSystemNPCs(0)
     });
 
     // Initialize narrative
@@ -84,6 +85,7 @@
     if (FA.narrative && narrativeCfg) {
       FA.narrative.init(narrativeCfg);
     }
+    Combat.clearProjectiles();
 
     // Position player near first station
     var ship = Player.getShip();
@@ -97,53 +99,178 @@
   }
 
   // === NPC SYSTEM ===
+  // NPCs have attitudes: hostile (attack), neutral (ignore), friendly (patrol)
+  // Attitude is driven by faction reputation — changes dynamically
 
-  // NPCs removed — empty space is more atmospheric
+  function createNPC(shipType, faction, x, y) {
+    var shipDef = FA.lookup('shipTypes', shipType);
+    var rep = Player.getReputation(faction);
+
+    // Initial attitude based on faction + reputation
+    var attitude = 'neutral';
+    if (faction === 'pirates') {
+      attitude = rep > 20 ? 'neutral' : 'hostile';
+    } else if (rep < -30) {
+      attitude = 'hostile';
+    } else if (rep > 20) {
+      attitude = 'friendly';
+    }
+
+    return {
+      shipType: shipType,
+      faction: faction,
+      attitude: attitude,
+      attackedByPlayer: false,
+      hull: shipDef ? shipDef.maxHull : 30,
+      maxHull: shipDef ? shipDef.maxHull : 30,
+      shield: shipDef ? shipDef.maxShield : 10,
+      maxShield: shipDef ? shipDef.maxShield : 10,
+      speed: shipDef ? shipDef.speed : 3,
+      turnSpeed: shipDef ? shipDef.turnSpeed : 0.04,
+      weapons: shipType === 'trader' ? [] : ['laser'],
+      x: x, y: y,
+      vx: 0, vy: 0,
+      angle: Math.random() * Math.PI * 2,
+      cooldown: 0,
+      targetX: FA.rand(-300, 300), targetY: FA.rand(-300, 300)
+    };
+  }
+
+  function spawnSystemNPCs(systemId) {
+    var sys = Galaxy.getSystem(systemId);
+    if (!sys) return [];
+    var npcs = [];
+    var stations = Galaxy.getStations(systemId);
+
+    // Trader near stations in populated systems
+    if (stations.length > 0 && sys.population >= 3) {
+      var st = stations[FA.rand(0, stations.length - 1)];
+      npcs.push(createNPC('trader', 'merchants', st.x + FA.rand(-100, 100), st.y + FA.rand(-100, 100)));
+    }
+
+    // Faction patrol
+    if (sys.faction && sys.faction !== 'pirates' && sys.population >= 2) {
+      npcs.push(createNPC('fighter', sys.faction, FA.rand(-400, 400), FA.rand(-400, 400)));
+    }
+
+    // Pirates in dangerous systems
+    if (sys.danger >= 2) {
+      var sign = Math.random() > 0.5 ? 1 : -1;
+      npcs.push(createNPC('fighter', 'pirates', FA.rand(300, 600) * sign, FA.rand(300, 600) * -sign));
+    }
+    if (sys.danger >= 4) {
+      var sign2 = Math.random() > 0.5 ? 1 : -1;
+      npcs.push(createNPC('corvette', 'pirates', FA.rand(400, 700) * sign2, FA.rand(400, 700) * -sign2));
+    }
+
+    return npcs;
+  }
 
   function updateNPCs(npcs, stations, player, dt) {
     for (var i = 0; i < npcs.length; i++) {
       var npc = npcs[i];
 
-      var dx = npc.targetX - npc.x;
-      var dy = npc.targetY - npc.y;
-      var dist = Math.sqrt(dx * dx + dy * dy);
-
-      // Pick new target when close
-      if (dist < 30) {
-        if (stations.length > 0 && Math.random() > 0.3) {
-          var st = stations[FA.rand(0, stations.length - 1)];
-          npc.targetX = st.x + FA.rand(-50, 50);
-          npc.targetY = st.y + FA.rand(-50, 50);
+      // Recompute attitude from reputation (unless manually aggro'd)
+      if (!npc.attackedByPlayer) {
+        var rep = Player.getReputation(npc.faction);
+        if (npc.faction === 'pirates') {
+          npc.attitude = rep > 20 ? 'neutral' : 'hostile';
+        } else if (rep < -30) {
+          npc.attitude = 'hostile';
+        } else if (rep > 20) {
+          npc.attitude = 'friendly';
         } else {
-          npc.targetX = FA.rand(-300, 300);
-          npc.targetY = FA.rand(-300, 300);
+          npc.attitude = 'neutral';
         }
-        continue;
       }
 
-      // Rotate toward target
-      var desiredAngle = Math.atan2(dx, -dy);
-      var angleDiff = desiredAngle - npc.angle;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      if (npc.attitude === 'hostile') {
+        updateHostileNPC(npc, player, dt);
+      } else {
+        updatePassiveNPC(npc, stations, dt);
+      }
 
-      var turnRate = 0.002 * dt;
-      if (angleDiff > turnRate) npc.angle += turnRate;
-      else if (angleDiff < -turnRate) npc.angle -= turnRate;
-      else npc.angle = desiredAngle;
+      // Shield recharge
+      npc.shield = Math.min(npc.maxShield, npc.shield + 0.001 * dt);
+    }
+  }
 
-      // Thrust
+  function updateHostileNPC(npc, player, dt) {
+    var dx = player.x - npc.x;
+    var dy = player.y - npc.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var desiredAngle = Math.atan2(dx, -dy);
+
+    var angleDiff = desiredAngle - npc.angle;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+    var turnAmount = npc.turnSpeed * dt;
+    if (angleDiff > turnAmount) npc.angle += turnAmount;
+    else if (angleDiff < -turnAmount) npc.angle -= turnAmount;
+    else npc.angle = desiredAngle;
+
+    // Chase if far, circle if close
+    if (dist > 200) {
       npc.vx += Math.sin(npc.angle) * npc.speed * 0.02;
       npc.vy -= Math.cos(npc.angle) * npc.speed * 0.02;
-
-      // Friction
-      npc.vx *= 0.99;
-      npc.vy *= 0.99;
-
-      // Position
-      npc.x += npc.vx;
-      npc.y += npc.vy;
+    } else if (dist < 150) {
+      npc.angle += 0.01 * dt;
+      npc.vx += Math.sin(npc.angle) * npc.speed * 0.015;
+      npc.vy -= Math.cos(npc.angle) * npc.speed * 0.015;
     }
+
+    // Fire when aimed and in range
+    npc.cooldown = Math.max(0, npc.cooldown - dt);
+    if (Math.abs(angleDiff) < 0.3 && dist < 300 && npc.cooldown <= 0 && npc.weapons.length > 0) {
+      var weaponId = npc.weapons[0];
+      var weaponDef = FA.lookup('weaponTypes', weaponId);
+      if (weaponDef) {
+        Combat.spawnProjectile(npc, weaponId, false);
+        npc.cooldown = weaponDef.cooldown * 4;
+      }
+    }
+
+    npc.vx *= 0.99;
+    npc.vy *= 0.99;
+    npc.x += npc.vx;
+    npc.y += npc.vy;
+  }
+
+  function updatePassiveNPC(npc, stations, dt) {
+    var dx = npc.targetX - npc.x;
+    var dy = npc.targetY - npc.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 30) {
+      if (stations.length > 0 && Math.random() > 0.3) {
+        var st = stations[FA.rand(0, stations.length - 1)];
+        npc.targetX = st.x + FA.rand(-50, 50);
+        npc.targetY = st.y + FA.rand(-50, 50);
+      } else {
+        npc.targetX = FA.rand(-500, 500);
+        npc.targetY = FA.rand(-500, 500);
+      }
+      return;
+    }
+
+    var desiredAngle = Math.atan2(dx, -dy);
+    var angleDiff = desiredAngle - npc.angle;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+    var turnRate = 0.002 * dt;
+    if (angleDiff > turnRate) npc.angle += turnRate;
+    else if (angleDiff < -turnRate) npc.angle -= turnRate;
+    else npc.angle = desiredAngle;
+
+    npc.vx += Math.sin(npc.angle) * npc.speed * 0.01;
+    npc.vy -= Math.cos(npc.angle) * npc.speed * 0.01;
+
+    npc.vx *= 0.99;
+    npc.vy *= 0.99;
+    npc.x += npc.vx;
+    npc.y += npc.vy;
   }
 
   // Generate random starfield for background rendering
@@ -291,26 +418,20 @@
             player.vy = 0;
             player.angle = 0;
 
+            // Spawn NPCs for new system
+            state.npcs = spawnSystemNPCs(targetId);
+            Combat.clearProjectiles();
+
             // Narrative triggers
             var visited = Object.keys(Player.getVisitedSystems()).length;
             if (visited === 2) triggerNarrative('first_jump', 'first_jump');
             if (visited >= 5) triggerNarrative('trader_life', 'trader_life');
 
-            // Pirate ambush in dangerous systems
-            var destSys = Galaxy.getSystem(targetId);
-            if (destSys.danger >= 2) {
-              var ambushChance = (destSys.danger - 1) * 0.15;
-              if (Math.random() < ambushChance) {
-                var ambushEnemies = [{
-                  shipType: 'fighter', faction: 'pirates',
-                  ai: destSys.danger >= 3 ? 'aggressive' : 'defensive',
-                  weapons: ['laser']
-                }];
-                if (destSys.danger >= 4) {
-                  ambushEnemies.push({ shipType: 'fighter', faction: 'pirates', ai: 'aggressive', weapons: ['laser'] });
-                }
-                Combat.start(ambushEnemies, { systemId: targetId, reason: 'pirate_ambush' });
-                showNarrative('pirate_encounter');
+            // Warn about pirates on first encounter
+            for (var npi = 0; npi < state.npcs.length; npi++) {
+              if (state.npcs[npi].attitude === 'hostile') {
+                triggerNarrative('pirate_encounter', 'pirate_encounter');
+                break;
               }
             }
           }
@@ -321,12 +442,6 @@
 
     // --- System View ---
     else if (state.view === 'system_view') {
-      // During combat: only flee allowed
-      if (Combat.isActive()) {
-        if (data.action === 'flee') Combat.flee();
-        return;
-      }
-
       if (data.action === 'map') {
         state.view = 'galaxy_map';
         state.selectedSystem = null;
@@ -569,17 +684,21 @@
         }
       }
 
-      // Combat update (combat happens in system view)
-      if (Combat.isActive()) {
-        Combat.update(dt);
-        if (!Combat.isActive()) {
-          if (player.hull <= 0) {
-            showNarrative('defeat');
-            state.screen = 'defeat';
-            var score = Player.computeScore();
-            FA.emit('game:over', { victory: false, score: score });
-          }
-        }
+      // NPC update
+      if (state.npcs && state.npcs.length > 0) {
+        updateNPCs(state.npcs, stations, player, dt);
+      }
+
+      // Shooting and projectile collisions
+      Combat.updatePlayerShooting(dt, player);
+      Combat.updateProjectiles(dt, player, state.npcs || []);
+
+      // Player death check
+      if (player.hull <= 0) {
+        showNarrative('defeat');
+        state.screen = 'defeat';
+        var score = Player.computeScore();
+        FA.emit('game:over', { victory: false, score: score });
       }
 
       // Shield recharge
