@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Trader — ForkArcade</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- SDK -->
+  <script src="forkarcade-sdk.js?v=2"></script>
+
+  <!-- Sprites -->
+  <script src="sprites.js?v=2"></script>
+
+  <!-- Engine (load order matters) -->
+  <script src="fa-engine.js?v=2"></script>
+  <script src="fa-renderer.js?v=2"></script>
+  <script src="fa-input.js?v=2"></script>
+  <script src="fa-audio.js?v=2"></script>
+  <script src="fa-narrative.js?v=2"></script>
+
+  <!-- Game (load order matters) -->
+  <script src="data.js?v=2"></script>
+  <script src="galaxy.js?v=2"></script>
+  <script src="player.js?v=2"></script>
+  <script src="combat.js?v=2"></script>
+  <script src="render.js?v=2"></script>
+  <script src="main.js?v=2"></script>
+</body>
+</html>

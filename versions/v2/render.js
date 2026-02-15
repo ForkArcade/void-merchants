@@ -1,0 +1,1042 @@
+// Void Merchants — Rendering
+// All render layers: start screen, galaxy map, system view, station menus, combat, HUD, narrative, game over
+// Exports: window.Render
+(function() {
+  'use strict';
+  var FA = window.FA;
+
+  var SHIP_SIZE = 24;
+  var STATION_SIZE = 20;
+  var PROJ_SIZE = 12;
+
+  // Draw a sprite centered and rotated; falls back to fallbackFn if no sprite found
+  function drawRotatedSprite(ctx, category, name, x, y, angle, size, fallbackFn) {
+    var sprite = typeof getSprite === 'function' && getSprite(category, name);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (sprite) {
+      drawSprite(ctx, sprite, -size / 2, -size / 2, size);
+    } else {
+      fallbackFn(ctx);
+    }
+    ctx.restore();
+  }
+
+  // Draw a static sprite centered; falls back to fallbackFn
+  function drawStaticSprite(ctx, category, name, x, y, size, fallbackFn, frame) {
+    var sprite = typeof getSprite === 'function' && getSprite(category, name);
+    if (sprite) {
+      drawSprite(ctx, sprite, x - size / 2, y - size / 2, size, frame);
+    } else {
+      fallbackFn(ctx);
+    }
+  }
+
+  function setup() {
+    var cfg = FA.lookup('config', 'game');
+    var colors = FA.lookup('config', 'colors');
+    var W = cfg.canvasWidth;
+    var H = cfg.canvasHeight;
+
+    // ========== LAYER: Start Screen (order 0) ==========
+    FA.addLayer('startScreen', function() {
+      var state = FA.getState();
+      if (state.screen !== 'start') return;
+
+      FA.draw.clear(colors.bg);
+
+      // Title
+      FA.draw.text('VOID MERCHANTS', W / 2, 200, { color: '#4ef', size: 36, bold: true, align: 'center', baseline: 'middle' });
+
+      // Subtitle
+      FA.draw.text('Trade. Fight. Survive.', W / 2, 250, { color: '#aaa', size: 16, align: 'center', baseline: 'middle' });
+
+      // Controls list
+      var controls = [
+        'WASD / Arrows  -  Fly / Navigate',
+        'SPACE / ENTER   -  Confirm / Shoot',
+        'M               -  Galaxy Map',
+        '1-5             -  Station Tabs',
+        'ESC             -  Back',
+        'F               -  Flee (combat)'
+      ];
+      var cy = 340;
+      for (var i = 0; i < controls.length; i++) {
+        FA.draw.text(controls[i], W / 2, cy + i * 22, { color: '#888', size: 12, align: 'center', baseline: 'middle' });
+      }
+
+      // Blinking prompt
+      if (Date.now() % 1000 < 500) {
+        FA.draw.text('[SPACE] to begin', W / 2, 500, { color: '#4ef', size: 16, bold: true, align: 'center', baseline: 'middle' });
+      }
+    }, 0);
+
+    // ========== LAYER: Galaxy Map Background (order 1) ==========
+    FA.addLayer('galaxyMapBg', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'galaxy_map') return;
+
+      var systems = Galaxy.getSystems();
+      var scale = 0.7;
+      var ox = W / 2;
+      var oy = H / 2;
+      var ctx = FA.getCtx();
+
+      ctx.strokeStyle = colors.connection;
+      ctx.lineWidth = 1;
+
+      for (var i = 0; i < systems.length; i++) {
+        var sys = systems[i];
+        var sx = sys.x * scale + ox;
+        var sy = sys.y * scale + oy;
+        var conns = sys.connections;
+        for (var c = 0; c < conns.length; c++) {
+          var target = systems[conns[c]];
+          if (conns[c] > i) {
+            var tx = target.x * scale + ox;
+            var ty = target.y * scale + oy;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+          }
+        }
+      }
+    }, 1);
+
+    // ========== LAYER: Galaxy Map Systems (order 2) ==========
+    FA.addLayer('galaxyMapSystems', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'galaxy_map') return;
+
+      var systems = Galaxy.getSystems();
+      var player = Player.getShip();
+      var scale = 0.7;
+      var ox = W / 2;
+      var oy = H / 2;
+
+      // Draw fuel range circle
+      var curSys = systems[player.currentSystem];
+      if (curSys) {
+        var curX = curSys.x * scale + ox;
+        var curY = curSys.y * scale + oy;
+
+        // Find max jump range in pixels: find the farthest connected system reachable with current fuel
+        var maxDist = 0;
+        for (var r = 0; r < systems.length; r++) {
+          if (r !== player.currentSystem && Galaxy.isConnected(player.currentSystem, r)) {
+            var fuelNeeded = Galaxy.fuelForJump(player.currentSystem, r);
+            if (fuelNeeded <= player.fuel) {
+              var d = Math.hypot(systems[r].x - curSys.x, systems[r].y - curSys.y);
+              if (d > maxDist) maxDist = d;
+            }
+          }
+        }
+        if (maxDist > 0) {
+          FA.draw.pushAlpha(0.3);
+          FA.draw.strokeCircle(curX, curY, maxDist * scale + 10, colors.fuelRange, 2);
+          FA.draw.popAlpha();
+        }
+      }
+
+      // Draw each system
+      for (var i = 0; i < systems.length; i++) {
+        var sys = systems[i];
+        var sx = sys.x * scale + ox;
+        var sy = sys.y * scale + oy;
+
+        // Faction color
+        var factionColor = '#666';
+        if (sys.faction) {
+          var faction = FA.lookup('factions', sys.faction);
+          if (faction) factionColor = faction.color;
+        }
+
+        var radius = 3 + sys.population;
+        FA.draw.circle(sx, sy, radius, factionColor);
+
+        // System name
+        FA.draw.text(sys.name, sx, sy + radius + 4, { color: '#667', size: 9, align: 'center', baseline: 'top' });
+
+        // Selected system: yellow ring
+        if (state.selectedSystem === i) {
+          FA.draw.strokeCircle(sx, sy, radius + 4, colors.selected, 2);
+        }
+
+        // Player's current system: pulsing ring
+        if (i === player.currentSystem) {
+          FA.draw.pushAlpha(Math.sin(Date.now() * 0.005) * 0.3 + 0.7);
+          FA.draw.strokeCircle(sx, sy, radius + 6, '#4ef', 2);
+          FA.draw.popAlpha();
+        }
+      }
+    }, 2);
+
+    // ========== LAYER: Galaxy Map Info Panel (order 3) ==========
+    FA.addLayer('galaxyMapInfo', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'galaxy_map') return;
+      if (state.selectedSystem == null) return;
+
+      var sys = Galaxy.getSystem(state.selectedSystem);
+      if (!sys) return;
+
+      var player = Player.getShip();
+      var px = W - 280;
+      var py = H - 200;
+      var pw = 260;
+      var ph = 180;
+
+      // Panel background
+      FA.draw.pushAlpha(0.85);
+      FA.draw.rect(px, py, pw, ph, '#000510');
+      FA.draw.popAlpha();
+      FA.draw.strokeRect(px, py, pw, ph, '#334', 1);
+
+      // System name
+      FA.draw.text(sys.name, px + 10, py + 10, { color: '#fff', size: 14, bold: true });
+
+      // Economy
+      FA.draw.text('Economy: ' + sys.economy, px + 10, py + 32, { color: '#aaa', size: 11 });
+
+      // Tech level
+      FA.draw.text('Tech Level: ' + sys.techLevel, px + 10, py + 48, { color: '#aaa', size: 11 });
+
+      // Danger
+      var dangerStr = '';
+      for (var d = 0; d < sys.danger; d++) dangerStr += '*';
+      if (sys.danger === 0) dangerStr = 'Safe';
+      FA.draw.text('Danger: ', px + 10, py + 64, { color: '#aaa', size: 11 });
+      FA.draw.text(dangerStr, px + 70, py + 64, { color: '#f44', size: 11 });
+
+      // Faction
+      var fName = 'Independent';
+      var fColor = '#666';
+      if (sys.faction) {
+        var fac = FA.lookup('factions', sys.faction);
+        if (fac) { fName = fac.name; fColor = fac.color; }
+      }
+      FA.draw.text('Faction: ', px + 10, py + 80, { color: '#aaa', size: 11 });
+      FA.draw.text(fName, px + 75, py + 80, { color: fColor, size: 11 });
+
+      // Fuel cost
+      var fuelCost = Galaxy.fuelForJump(player.currentSystem, state.selectedSystem);
+      var connected = Galaxy.isConnected(player.currentSystem, state.selectedSystem);
+
+      if (state.selectedSystem === player.currentSystem) {
+        FA.draw.text('You are here', px + 10, py + 110, { color: '#4ef', size: 12, bold: true });
+      } else if (!connected) {
+        FA.draw.text('Not connected', px + 10, py + 110, { color: '#f44', size: 12, bold: true });
+      } else {
+        FA.draw.text('Fuel cost: ' + fuelCost, px + 10, py + 110, { color: '#aaa', size: 11 });
+        if (player.fuel >= fuelCost) {
+          FA.draw.text('ENTER to jump', px + 10, py + 135, { color: '#4ef', size: 12, bold: true });
+        } else {
+          FA.draw.text('Not enough fuel', px + 10, py + 135, { color: '#f44', size: 12, bold: true });
+        }
+      }
+    }, 3);
+
+    // ========== LAYER: System View Background (order 10) ==========
+    FA.addLayer('systemViewBg', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'system_view') return;
+
+      var starCanvas = state.starfield;
+      if (!starCanvas) return;
+
+      var ctx = FA.getCtx();
+      var camX = FA.camera.x;
+      var camY = FA.camera.y;
+
+      // Blit pre-rendered starfield with parallax (1 drawImage vs 200 arcs)
+      var pxOff = ((-(camX * 0.3) % (W * 3)) + W * 3) % (W * 3) - W;
+      var pyOff = ((-(camY * 0.3) % (H * 3)) + H * 3) % (H * 3) - H;
+      ctx.drawImage(starCanvas, pxOff, pyOff);
+
+      // Draw central star
+      var starX = 0 - camX;
+      var starY = 0 - camY;
+      if (starX > -100 && starX < W + 100 && starY > -100 && starY < H + 100) {
+        ctx.save();
+        var grad = ctx.createRadialGradient(starX, starY, 0, starX, starY, 30);
+        grad.addColorStop(0, '#fff');
+        grad.addColorStop(0.3, '#ff8');
+        grad.addColorStop(1, 'rgba(255,136,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(starX, starY, 30, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Draw station orbit paths
+      var player = Player.getShip();
+      var orbitStations = Galaxy.getStations(player.currentSystem);
+      var osx = 0 - camX;
+      var osy = 0 - camY;
+      ctx.setLineDash([4, 8]);
+      FA.draw.pushAlpha(0.12);
+      ctx.strokeStyle = '#4af';
+      ctx.lineWidth = 1;
+      for (var oi = 0; oi < orbitStations.length; oi++) {
+        ctx.beginPath();
+        ctx.arc(osx, osy, orbitStations[oi].orbitRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      FA.draw.popAlpha();
+      ctx.setLineDash([]);
+    }, 10);
+
+    // ========== LAYER: System View Objects (order 11) ==========
+    FA.addLayer('systemViewObjects', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'system_view') return;
+
+      var player = Player.getShip();
+      var camX = FA.camera.x;
+      var camY = FA.camera.y;
+      var ctx = FA.getCtx();
+
+      // Draw stations
+      var stations = Galaxy.getStations(player.currentSystem);
+      for (var i = 0; i < stations.length; i++) {
+        var st = stations[i];
+        var stx = st.x - camX;
+        var sty = st.y - camY;
+
+        // Station sprite or fallback square
+        drawStaticSprite(ctx, 'ui', 'station', stx, sty, STATION_SIZE, function() {
+          FA.draw.rect(stx - 6, sty - 6, 12, 12, '#88a');
+          FA.draw.strokeRect(stx - 7, sty - 7, 14, 14, '#aac', 1);
+        });
+
+        // Station name
+        FA.draw.text(st.name, stx, sty + 12, { color: '#667', size: 9, align: 'center', baseline: 'top' });
+
+        // Dock prompt if close
+        var dx = player.x - st.x;
+        var dy = player.y - st.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 60) {
+          FA.draw.text('SPACE to dock', stx, sty - 18, { color: '#4ef', size: 11, bold: true, align: 'center', baseline: 'middle' });
+        }
+      }
+
+      // Draw NPCs
+      var npcs = FA.getState().npcs || [];
+      for (var ni = 0; ni < npcs.length; ni++) {
+        var npc = npcs[ni];
+        var nx = npc.x - camX;
+        var ny = npc.y - camY;
+
+        // Skip if off-screen
+        if (nx < -50 || nx > W + 50 || ny < -50 || ny > H + 50) continue;
+
+        // Color based on attitude
+        var npcColor = npc.attitude === 'hostile' ? '#f44' :
+                       npc.attitude === 'friendly' ? '#4f4' : '#888';
+
+        // NPC sprite name based on faction
+        var npcSpriteName = npc.faction === 'pirates' ? 'pirate' :
+                            npc.faction === 'federation' ? 'militaryPatrol' :
+                            npc.faction === 'rebels' ? 'rebelFighter' :
+                            npc.faction === 'scientists' ? 'bountyHunter' :
+                            npc.faction === 'merchants' ? 'merchantCruiser' : 'pirate';
+        var npcSize = npc.shipType === 'trader' ? 18 : 20;
+
+        drawRotatedSprite(ctx, 'enemies', npcSpriteName, nx, ny, npc.angle || 0, npcSize, function(c) {
+          c.beginPath();
+          c.moveTo(0, -8);
+          c.lineTo(-5, 6);
+          c.lineTo(5, 6);
+          c.closePath();
+          c.fillStyle = npcColor;
+          c.fill();
+        });
+
+        // Health bar + shield for hostile NPCs
+        if (npc.attitude === 'hostile') {
+          var hpR = npc.hull / (npc.maxHull || 1);
+          FA.draw.bar(nx - 15, ny - 18, 30, 3, hpR, hpR > 0.3 ? '#f84' : '#f44', '#222');
+          if (npc.shield > 0) {
+            FA.draw.pushAlpha((npc.shield / (npc.maxShield || 1)) * 0.4);
+            FA.draw.strokeCircle(nx, ny, 15, '#8ff', 1);
+            FA.draw.popAlpha();
+          }
+        }
+      }
+
+      // Draw player ship
+      var px = player.x - camX;
+      var py = player.y - camY;
+
+      // Engine glow if thrusting
+      if (FA.isHeld('up')) {
+        var eSprite = typeof getSprite === 'function' && getSprite('effects', 'engineFlame');
+        if (eSprite) {
+          var eFrame = Math.floor(Date.now() / 150) % spriteFrames(eSprite);
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          drawSprite(ctx, eSprite, -6, 4, 12, eFrame);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          ctx.beginPath();
+          ctx.arc(0, 10, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#f84';
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Player ship sprite or fallback triangle
+      drawRotatedSprite(ctx, 'player', player.shipTypeId || 'shuttle', px, py, player.angle, SHIP_SIZE, function(c) {
+        c.beginPath();
+        c.moveTo(0, -12);
+        c.lineTo(-8, 8);
+        c.lineTo(8, 8);
+        c.closePath();
+        c.fillStyle = colors.playerShip;
+        c.fill();
+      });
+
+      // Shield glow when damaged
+      if (player.shield > 0 && player.shield < player.maxShield) {
+        FA.draw.pushAlpha((player.shield / player.maxShield) * 0.5);
+        FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
+        FA.draw.popAlpha();
+      }
+
+      // Effects (explosions) and floating text
+      var effects = FA.getEffects();
+      for (var efi = 0; efi < effects.length; efi++) {
+        var eff = effects[efi];
+        var efx = (eff.x || 0) - camX;
+        var efy = (eff.y || 0) - camY;
+        var efAlpha = FA.clamp(eff.life / (eff.maxLife || 1000), 0, 1);
+        if (eff.radius) {
+          FA.draw.pushAlpha(efAlpha);
+          FA.draw.circle(efx, efy, eff.radius, '#f84');
+          FA.draw.popAlpha();
+        }
+      }
+      FA.drawFloats();
+    }, 11);
+
+    // ========== LAYER: Station Menu (order 20) ==========
+    FA.addLayer('stationMenu', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'station') return;
+
+      var player = Player.getShip();
+      var ctx = FA.getCtx();
+
+      // Dark background overlay
+      FA.draw.pushAlpha(0.92);
+      FA.draw.rect(0, 0, W, H, '#000510');
+      FA.draw.popAlpha();
+
+      // Station name header
+      var stations = Galaxy.getStations(player.currentSystem);
+      var stationName = stations.length > 0 ? stations[0].name : 'Station';
+      FA.draw.text(stationName, W / 2, 25, { color: '#fff', size: 18, bold: true, align: 'center', baseline: 'middle' });
+
+      // 5 tabs
+      var tabNames = ['Trade', 'Shipyard', 'Fuel', 'Missions', 'Repair'];
+      var tabW = 180;
+      var tabH = 30;
+      var tabStartX = (W - tabW * 5) / 2;
+      var tabY = 55;
+
+      var tabMouse = FA.getMouse();
+      for (var t = 0; t < 5; t++) {
+        var tx = tabStartX + t * tabW;
+        var isActive = state.stationTab === t;
+        var isTabHover = !isActive && tabMouse.y >= tabY && tabMouse.y <= tabY + tabH && tabMouse.x >= tx && tabMouse.x <= tx + tabW - 2;
+        FA.draw.rect(tx, tabY, tabW - 2, tabH, isActive ? '#224' : (isTabHover ? '#1a1a2a' : '#111'));
+        FA.draw.strokeRect(tx, tabY, tabW - 2, tabH, isActive ? '#4ef' : (isTabHover ? '#6af' : '#333'), 1);
+        FA.draw.text((t + 1) + '. ' + tabNames[t], tx + tabW / 2 - 1, tabY + tabH / 2, {
+          color: isActive ? '#4ef' : (isTabHover ? '#adf' : '#888'),
+          size: 12,
+          bold: isActive,
+          align: 'center',
+          baseline: 'middle'
+        });
+      }
+
+      var contentY = 105;
+      var contentX = 60;
+      var curSys = Galaxy.getSystem(player.currentSystem);
+
+      // --- Tab 0: Trade ---
+      if (state.stationTab === 0) {
+        var commodities = FA.lookupAll('commodities');
+        var cids = Object.keys(commodities);
+
+        // Mouse hover detection
+        var mouse = FA.getMouse();
+
+        // Column headers
+        FA.draw.text('Commodity', contentX, contentY, { color: '#888', size: 11 });
+        FA.draw.text('Buy', contentX + 200, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Sell', contentX + 300, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Cargo', contentX + 400, contentY, { color: '#888', size: 11, align: 'center' });
+
+        for (var ci = 0; ci < cids.length; ci++) {
+          var cid = cids[ci];
+          var com = commodities[cid];
+          var rowY = contentY + 25 + ci * 28;
+          var isSelected = state.menuIndex === ci;
+          var isHovered = mouse.y >= rowY - 3 && mouse.y <= rowY + 21 && mouse.x >= contentX - 5 && mouse.x <= contentX + 600;
+
+          if (isSelected) {
+            FA.draw.rect(contentX - 5, rowY - 3, 600, 24, 'rgba(78,238,255,0.08)');
+          } else if (isHovered) {
+            FA.draw.rect(contentX - 5, rowY - 3, 600, 24, 'rgba(78,238,255,0.04)');
+          }
+
+          FA.draw.text(com.name, contentX, rowY, { color: isSelected ? '#fff' : (isHovered ? '#ddd' : '#ccc'), size: 12 });
+
+          var buyP = curSys ? Galaxy.getBuyPrice(cid, curSys) : 0;
+          var sellP = curSys ? Galaxy.getSellPrice(cid, curSys) : 0;
+          FA.draw.text(buyP + 'cr', contentX + 200, rowY, { color: '#fd4', size: 12, align: 'center' });
+
+          FA.draw.text(sellP + 'cr', contentX + 300, rowY, { color: '#ccc', size: 12, align: 'center' });
+
+          // Player cargo quantity
+          var cargoQty = 0;
+          var cargo = player.cargo;
+          for (var cg = 0; cg < cargo.length; cg++) {
+            if (cargo[cg].id === cid) { cargoQty = cargo[cg].quantity; break; }
+          }
+          FA.draw.text(cargoQty > 0 ? String(cargoQty) : '-', contentX + 400, rowY, { color: cargoQty > 0 ? '#fff' : '#444', size: 12, align: 'center' });
+
+          // BUY button
+          var canBuy = player.credits >= buyP && (player.cargo.reduce(function(s, c) { return s + c.quantity; }, 0) < player.maxCargo);
+          var buyBtnHover = isHovered && mouse.x >= contentX + 455 && mouse.x <= contentX + 515;
+          FA.draw.rect(contentX + 455, rowY - 2, 55, 20, buyBtnHover && canBuy ? '#264' : '#112');
+          FA.draw.strokeRect(contentX + 455, rowY - 2, 55, 20, canBuy ? '#4a4' : '#333', 1);
+          FA.draw.text('BUY', contentX + 482, rowY + 8, { color: canBuy ? (buyBtnHover ? '#6f6' : '#4a4') : '#333', size: 10, align: 'center', baseline: 'middle' });
+
+          // SELL button
+          var hasCargo = cargoQty > 0;
+          var sellBtnHover = isHovered && mouse.x >= contentX + 530 && mouse.x <= contentX + 590;
+          FA.draw.rect(contentX + 530, rowY - 2, 55, 20, sellBtnHover && hasCargo ? '#432' : '#112');
+          FA.draw.strokeRect(contentX + 530, rowY - 2, 55, 20, hasCargo ? '#fa0' : '#333', 1);
+          FA.draw.text('SELL', contentX + 557, rowY + 8, { color: hasCargo ? (sellBtnHover ? '#fc4' : '#fa0') : '#333', size: 10, align: 'center', baseline: 'middle' });
+        }
+
+        // Trade route hints
+        if (curSys) {
+          var routes = Galaxy.findTradeRoutes(player.currentSystem);
+          if (routes.length > 0) {
+            var routeY = contentY + 25 + cids.length * 28 + 20;
+            FA.draw.text('Best routes from here:', contentX, routeY, { color: '#888', size: 11 });
+            for (var ri = 0; ri < Math.min(3, routes.length); ri++) {
+              var rt = routes[ri];
+              FA.draw.text(rt.commodityName + ' -> ' + rt.systemName + ' (+' + rt.profit + 'cr)', contentX + 10, routeY + 18 + ri * 18, { color: colors.profit, size: 10 });
+            }
+          }
+        }
+      }
+
+      // --- Tab 1: Shipyard ---
+      if (state.stationTab === 1) {
+        var shipTypes = FA.lookupAll('shipTypes');
+        var sids = Object.keys(shipTypes);
+
+        FA.draw.text('Ship', contentX, contentY, { color: '#888', size: 11 });
+        FA.draw.text('Hull', contentX + 140, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Shield', contentX + 200, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Cargo', contentX + 260, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Fuel', contentX + 320, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Wpns', contentX + 380, contentY, { color: '#888', size: 11, align: 'center' });
+        FA.draw.text('Price', contentX + 460, contentY, { color: '#888', size: 11, align: 'center' });
+
+        for (var si = 0; si < sids.length; si++) {
+          var sid = sids[si];
+          var ship = shipTypes[sid];
+          var sRowY = contentY + 25 + si * 26;
+          var isCurrent = player.shipTypeId === sid;
+          var isSelShip = state.menuIndex === si;
+
+          if (isCurrent) {
+            FA.draw.rect(contentX - 5, sRowY - 3, 540, 22, 'rgba(78,238,255,0.06)');
+          }
+          if (isSelShip) {
+            FA.draw.strokeRect(contentX - 5, sRowY - 3, 540, 22, '#4ef', 1);
+          }
+
+          var nameColor = isCurrent ? '#4ef' : '#ccc';
+          FA.draw.text(ship.name + (isCurrent ? ' [OWNED]' : ''), contentX, sRowY, { color: nameColor, size: 12 });
+          FA.draw.text(String(ship.maxHull), contentX + 140, sRowY, { color: '#f88', size: 12, align: 'center' });
+          FA.draw.text(String(ship.maxShield), contentX + 200, sRowY, { color: '#8ff', size: 12, align: 'center' });
+          FA.draw.text(String(ship.maxCargo), contentX + 260, sRowY, { color: '#ccc', size: 12, align: 'center' });
+          FA.draw.text(String(ship.maxFuel), contentX + 320, sRowY, { color: '#88f', size: 12, align: 'center' });
+          FA.draw.text(String(ship.weaponSlots), contentX + 380, sRowY, { color: '#fa0', size: 12, align: 'center' });
+          FA.draw.text(ship.price > 0 ? ship.price + 'cr' : 'Free', contentX + 460, sRowY, { color: '#fd4', size: 12, align: 'center' });
+        }
+
+        // Weapons section
+        var weaponTypes = FA.lookupAll('weaponTypes');
+        var wids = Object.keys(weaponTypes);
+        var weaponY = contentY + 25 + sids.length * 26 + 20;
+
+        FA.draw.text('Weapons', contentX, weaponY, { color: '#fa0', size: 13, bold: true });
+        for (var wi = 0; wi < wids.length; wi++) {
+          var wid = wids[wi];
+          var wpn = weaponTypes[wid];
+          var wRowY = weaponY + 22 + wi * 22;
+          var equipped = player.weapons.indexOf(wid) !== -1;
+
+          FA.draw.text(wpn.name + (equipped ? ' [EQP]' : ''), contentX, wRowY, { color: equipped ? wpn.color : '#aaa', size: 11 });
+          FA.draw.text('DMG:' + wpn.damage, contentX + 200, wRowY, { color: '#ccc', size: 10 });
+          FA.draw.text('RNG:' + wpn.range, contentX + 280, wRowY, { color: '#ccc', size: 10 });
+          FA.draw.text(wpn.price + 'cr', contentX + 380, wRowY, { color: '#fd4', size: 10 });
+        }
+      }
+
+      // --- Tab 2: Fuel ---
+      if (state.stationTab === 2) {
+        var fuelPriceBase = cfg.fuelPriceBase;
+        var fuelPrice = curSys ? Math.round(fuelPriceBase * (1 + curSys.danger * 0.1)) : fuelPriceBase;
+        var fuelNeeded = player.maxFuel - player.fuel;
+        var fuelCost = fuelNeeded * fuelPrice;
+
+        FA.draw.text('Fuel', W / 2, contentY + 20, { color: '#fff', size: 16, bold: true, align: 'center' });
+
+        FA.draw.text('Current Fuel:', contentX + 100, contentY + 60, { color: '#aaa', size: 12 });
+        FA.draw.bar(contentX + 100, contentY + 80, 300, 20, player.fuel / player.maxFuel, colors.fuelBar, '#222');
+        FA.draw.text(Math.floor(player.fuel) + ' / ' + player.maxFuel, contentX + 250, contentY + 84, { color: '#fff', size: 12, align: 'center', baseline: 'top' });
+
+        FA.draw.text('Price per unit: ' + fuelPrice + 'cr', contentX + 100, contentY + 120, { color: '#aaa', size: 12 });
+        FA.draw.text('Refuel cost: ' + fuelCost + 'cr', contentX + 100, contentY + 140, { color: '#fd4', size: 12 });
+
+        if (fuelNeeded > 0) {
+          var fuelMouse = FA.getMouse();
+          var fuelBtnHover = fuelMouse.y >= contentY + 175 && fuelMouse.y <= contentY + 210 && fuelMouse.x >= W / 2 - 80 && fuelMouse.x <= W / 2 + 80;
+          FA.draw.rect(W / 2 - 80, contentY + 178, 160, 28, fuelBtnHover ? '#224' : '#112');
+          FA.draw.strokeRect(W / 2 - 80, contentY + 178, 160, 28, '#4ef', 1);
+          FA.draw.text('REFUEL', W / 2, contentY + 192, { color: fuelBtnHover ? '#fff' : '#4ef', size: 14, bold: true, align: 'center', baseline: 'middle' });
+        } else {
+          FA.draw.text('Tank is full', W / 2, contentY + 190, { color: '#4f4', size: 14, align: 'center' });
+        }
+      }
+
+      // --- Tab 3: Missions ---
+      if (state.stationTab === 3) {
+        FA.draw.text('Available Missions', contentX, contentY, { color: '#fff', size: 14, bold: true });
+
+        var availMissions = state.availableMissions || [];
+        if (availMissions.length === 0) {
+          FA.draw.text('No missions available at this station.', contentX, contentY + 30, { color: '#666', size: 12 });
+        } else {
+          for (var mi = 0; mi < availMissions.length; mi++) {
+            var miss = availMissions[mi];
+            var mRowY = contentY + 30 + mi * 40;
+            var isMSel = state.menuIndex === mi;
+
+            if (isMSel) {
+              FA.draw.rect(contentX - 5, mRowY - 3, 600, 36, 'rgba(78,238,255,0.08)');
+            }
+
+            FA.draw.text(miss.title, contentX, mRowY, { color: isMSel ? '#fff' : '#ccc', size: 12 });
+            FA.draw.text('Reward: ' + miss.reward + 'cr', contentX + 400, mRowY, { color: '#fd4', size: 11 });
+            FA.draw.text('Type: ' + miss.type, contentX, mRowY + 16, { color: '#888', size: 10 });
+          }
+        }
+
+        // Active missions
+        var activeMissions = Player.getActiveMissions();
+        var activeY = contentY + 30 + Math.max(1, availMissions.length) * 40 + 30;
+        FA.draw.text('Active Missions (' + activeMissions.length + '/' + cfg.maxMissions + ')', contentX, activeY, { color: '#4ef', size: 13, bold: true });
+
+        if (activeMissions.length === 0) {
+          FA.draw.text('No active missions.', contentX, activeY + 22, { color: '#666', size: 11 });
+        } else {
+          for (var ai = 0; ai < activeMissions.length; ai++) {
+            var am = activeMissions[ai];
+            var aRowY = activeY + 22 + ai * 28;
+            FA.draw.text(am.title, contentX, aRowY, { color: '#ccc', size: 11 });
+            FA.draw.text(am.reward + 'cr', contentX + 400, aRowY, { color: '#fd4', size: 11 });
+          }
+        }
+      }
+
+      // --- Tab 4: Repair ---
+      if (state.stationTab === 4) {
+        var repairPrice = curSys ? Math.round(10 * (1 + curSys.techLevel * 0.05)) : 10;
+        var hullNeeded = player.maxHull - player.hull;
+        var repairCost = hullNeeded * repairPrice;
+
+        FA.draw.text('Hull Repair', W / 2, contentY + 20, { color: '#fff', size: 16, bold: true, align: 'center' });
+
+        FA.draw.text('Current Hull:', contentX + 100, contentY + 60, { color: '#aaa', size: 12 });
+        FA.draw.bar(contentX + 100, contentY + 80, 300, 20, player.hull / player.maxHull, colors.hullBar, '#222');
+        FA.draw.text(Math.floor(player.hull) + ' / ' + player.maxHull, contentX + 250, contentY + 84, { color: '#fff', size: 12, align: 'center', baseline: 'top' });
+
+        FA.draw.text('Price per HP: ' + repairPrice + 'cr', contentX + 100, contentY + 120, { color: '#aaa', size: 12 });
+        FA.draw.text('Repair cost: ' + repairCost + 'cr', contentX + 100, contentY + 140, { color: '#fd4', size: 12 });
+
+        if (hullNeeded > 0) {
+          var repMouse = FA.getMouse();
+          var repBtnHover = repMouse.y >= contentY + 175 && repMouse.y <= contentY + 210 && repMouse.x >= W / 2 - 80 && repMouse.x <= W / 2 + 80;
+          FA.draw.rect(W / 2 - 80, contentY + 178, 160, 28, repBtnHover ? '#224' : '#112');
+          FA.draw.strokeRect(W / 2 - 80, contentY + 178, 160, 28, '#4ef', 1);
+          FA.draw.text('REPAIR', W / 2, contentY + 192, { color: repBtnHover ? '#fff' : '#4ef', size: 14, bold: true, align: 'center', baseline: 'middle' });
+        } else {
+          FA.draw.text('Hull is pristine', W / 2, contentY + 190, { color: '#4f4', size: 14, align: 'center' });
+        }
+      }
+
+      // ESC to undock
+      FA.draw.text('ESC to undock', W / 2, H - 30, { color: '#888', size: 12, align: 'center', baseline: 'middle' });
+    }, 20);
+
+    // ========== LAYER: Combat Background (order 30) — disabled ==========
+    FA.addLayer('combatBg', function() {
+      return; // Combat uses system view background
+
+      var stars = state.starfield;
+      var camX = FA.camera.x;
+      var camY = FA.camera.y;
+
+      // Starfield with camera offset
+      if (stars) {
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          var sx = ((s.x - camX * 0.3) % (W * 3) + W * 3) % (W * 3) - W;
+          var sy = ((s.y - camY * 0.3) % (H * 3) + H * 3) % (H * 3) - H;
+          if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
+          FA.draw.pushAlpha(s.brightness * 0.5);
+          FA.draw.circle(sx, sy, s.size, colors.starfield);
+          FA.draw.popAlpha();
+        }
+      }
+
+      // Arena boundary lines (dim)
+      var arenaW = cfg.combatArenaWidth;
+      var arenaH = cfg.combatArenaHeight;
+      FA.draw.pushAlpha(0.15);
+      FA.draw.strokeRect(-camX, -camY, arenaW, arenaH, '#446', 2);
+      FA.draw.popAlpha();
+    }, 30);
+
+    // ========== LAYER: Combat Ships (order 31) — disabled ==========
+    FA.addLayer('combatShips', function() {
+      return; // NPCs rendered in systemViewObjects
+    }, 31);
+
+    // ========== LAYER: Combat Projectiles (order 32) ==========
+    FA.addLayer('combatProjectiles', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing' || state.view !== 'system_view') return;
+
+      var projectiles = Combat.getProjectiles();
+      var camX = FA.camera.x;
+      var camY = FA.camera.y;
+      var ctx = FA.getCtx();
+
+      for (var i = 0; i < projectiles.length; i++) {
+        var p = projectiles[i];
+        var px = p.x - camX;
+        var py = p.y - camY;
+
+        // Projectile sprite or fallback line
+        var projAngle = Math.atan2(p.vx, -p.vy);
+        var projName = (p.char === '*') ? 'missile' : 'laser';
+        var projSprite = typeof getSprite === 'function' && getSprite('effects', projName);
+        if (projSprite) {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(projAngle);
+          drawSprite(ctx, projSprite, -PROJ_SIZE / 2, -PROJ_SIZE / 2, PROJ_SIZE);
+          ctx.restore();
+        } else {
+          var len = 4;
+          var speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+          var nx = speed > 0 ? p.vx / speed : 0;
+          var ny = speed > 0 ? p.vy / speed : 0;
+          ctx.strokeStyle = p.color || '#0ff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(px - nx * len, py - ny * len);
+          ctx.lineTo(px + nx * len, py + ny * len);
+          ctx.stroke();
+        }
+      }
+    }, 32);
+
+    // ========== LAYER: Combat Effects (order 33) — disabled ==========
+    FA.addLayer('combatEffects', function() {
+      return; // Effects rendered in system view layer
+
+      var effects = FA.getEffects();
+      var camX = FA.camera.x;
+      var camY = FA.camera.y;
+
+      var ctx = FA.getCtx();
+      for (var i = 0; i < effects.length; i++) {
+        var eff = effects[i];
+        var ex = (eff.x || 0) - camX;
+        var ey = (eff.y || 0) - camY;
+        var alpha = FA.clamp(eff.life / (eff.maxLife || 1000), 0, 1);
+
+        if (eff.type === 'explosion' || eff.radius) {
+          var explSprite = typeof getSprite === 'function' && getSprite('effects', 'explosion');
+          if (explSprite) {
+            var explFrame = alpha > 0.5 ? 0 : 1;
+            var explSize = 16 + (1 - alpha) * 24;
+            FA.draw.pushAlpha(alpha);
+            drawSprite(ctx, explSprite, ex - explSize / 2, ey - explSize / 2, explSize, explFrame);
+            FA.draw.popAlpha();
+          } else {
+            var radius = (1 - alpha) * (eff.radius || 20);
+            FA.draw.pushAlpha(alpha);
+            FA.draw.circle(ex, ey, radius, eff.color || '#f84');
+            FA.draw.popAlpha();
+          }
+        } else if (eff.type === 'shieldHit') {
+          var shieldSprite = typeof getSprite === 'function' && getSprite('effects', 'shieldHit');
+          if (shieldSprite) {
+            FA.draw.pushAlpha(alpha * 0.6);
+            drawSprite(ctx, shieldSprite, ex - 12, ey - 12, 24);
+            FA.draw.popAlpha();
+          } else {
+            FA.draw.pushAlpha(alpha * 0.6);
+            FA.draw.strokeCircle(ex, ey, eff.radius || 18, '#4ff', 2);
+            FA.draw.popAlpha();
+          }
+        } else {
+          FA.draw.pushAlpha(alpha);
+          FA.draw.circle(ex, ey, 2, eff.color || '#fff');
+          FA.draw.popAlpha();
+        }
+      }
+
+      // Floating damage numbers
+      FA.drawFloats();
+    }, 33);
+
+    // ========== LAYER: HUD (order 40) ==========
+    FA.addLayer('hud', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing') return;
+
+      var player = Player.getShip();
+      var curSys = Galaxy.getSystem(player.currentSystem);
+
+      // Top-left: system name + economy
+      if (curSys) {
+        FA.draw.text(curSys.name, 15, 12, { color: colors.hudBright, size: 12, bold: true });
+        FA.draw.text(curSys.economy, 15, 28, { color: colors.hud, size: 10 });
+      }
+
+      // Top-right: credits
+      FA.draw.text(player.credits + ' cr', W - 15, 12, { color: colors.credits, size: 14, bold: true, align: 'right' });
+
+      // Bottom-left: status bars
+      var barX = 15;
+      var barW = 100;
+      var barH = 8;
+
+      // Hull bar
+      FA.draw.text('HULL', barX, H - 65, { color: colors.hullBar, size: 9 });
+      FA.draw.bar(barX + 35, H - 65, barW, barH, player.hull / player.maxHull, colors.hullBar, '#222');
+
+      // Shield bar
+      FA.draw.text('SHLD', barX, H - 50, { color: colors.shieldBar, size: 9 });
+      FA.draw.bar(barX + 35, H - 50, barW, barH, player.shield / player.maxShield, colors.shieldBar, '#222');
+
+      // Fuel bar
+      FA.draw.text('FUEL', barX, H - 35, { color: colors.fuelBar, size: 9 });
+      FA.draw.bar(barX + 35, H - 35, barW, barH, player.fuel / player.maxFuel, colors.fuelBar, '#222');
+
+      // Bottom-right: cargo + mission hint
+      FA.draw.text('Cargo: ' + Player.getCargoUsed() + '/' + player.maxCargo, W - 15, H - 50, { color: colors.hud, size: 11, align: 'right' });
+
+      var missions = Player.getActiveMissions();
+      if (missions.length > 0) {
+        FA.draw.text(missions[0].title, W - 15, H - 32, { color: '#c8b4ff', size: 10, align: 'right' });
+      }
+
+      // Station edge indicators (off-screen stations)
+      if (state.view === 'system_view') {
+        var stInd = Galaxy.getStations(player.currentSystem);
+        var camIX = FA.camera.x;
+        var camIY = FA.camera.y;
+        var margin = 30;
+        var ctx = FA.getCtx();
+
+        for (var si = 0; si < stInd.length; si++) {
+          var sti = stInd[si];
+          var scrX = sti.x - camIX;
+          var scrY = sti.y - camIY;
+
+          // Only draw indicator if station is off-screen
+          if (scrX >= margin && scrX <= W - margin && scrY >= margin && scrY <= H - margin) continue;
+
+          // Direction from screen center to station
+          var dirX = scrX - W / 2;
+          var dirY = scrY - H / 2;
+          var dirLen = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (dirLen < 1) continue;
+          dirX /= dirLen;
+          dirY /= dirLen;
+
+          // Clamp to screen edge
+          var edgeX = W / 2 + dirX * (W / 2 - margin);
+          var edgeY = H / 2 + dirY * (H / 2 - margin);
+
+          // Clamp within bounds
+          if (edgeX < margin) { edgeX = margin; edgeY = H / 2 + dirY * ((margin - W / 2) / dirX); }
+          if (edgeX > W - margin) { edgeX = W - margin; edgeY = H / 2 + dirY * ((W - margin - W / 2) / dirX); }
+          if (edgeY < margin) { edgeY = margin; edgeX = W / 2 + dirX * ((margin - H / 2) / dirY); }
+          if (edgeY > H - margin) { edgeY = H - margin; edgeX = W / 2 + dirX * ((H - margin - H / 2) / dirY); }
+
+          edgeX = Math.max(margin, Math.min(W - margin, edgeX));
+          edgeY = Math.max(margin, Math.min(H - margin, edgeY));
+
+          // Distance from player
+          var pDist = Math.round(Math.sqrt((player.x - sti.x) * (player.x - sti.x) + (player.y - sti.y) * (player.y - sti.y)));
+
+          // Arrow triangle
+          var aAngle = Math.atan2(dirX, -dirY);
+          ctx.save();
+          ctx.translate(edgeX, edgeY);
+          ctx.rotate(aAngle);
+          ctx.beginPath();
+          ctx.moveTo(0, -6);
+          ctx.lineTo(-4, 4);
+          ctx.lineTo(4, 4);
+          ctx.closePath();
+          ctx.fillStyle = '#88aacc';
+          ctx.fill();
+          ctx.restore();
+
+          // Station name + distance
+          FA.draw.text(sti.name, edgeX, edgeY + 10, { color: '#88aacc', size: 8, align: 'center', baseline: 'top' });
+          FA.draw.text(pDist + '', edgeX, edgeY + 20, { color: '#556', size: 8, align: 'center', baseline: 'top' });
+        }
+      }
+
+      // Control hints per view
+      var hint = '';
+      if (state.view === 'galaxy_map') hint = 'Arrows: select system | ENTER: jump | M: close map';
+      else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: shoot / dock | M: galaxy map';
+      else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | Q: sell | ESC: undock';
+      if (hint) {
+        FA.draw.text(hint, W / 2, H - 12, { color: '#556', size: 10, align: 'center' });
+      }
+    }, 40);
+
+    // ========== LAYER: Narrative Bar (order 45) ==========
+    FA.addLayer('narrativeBar', function() {
+      var state = FA.getState();
+      if (state.screen !== 'playing') return;
+      if (!state.narrativeMessage || state.narrativeMessage.life <= 0) return;
+
+      var msg = state.narrativeMessage;
+      var alpha = FA.clamp(msg.life / msg.maxLife, 0, 1);
+
+      FA.draw.pushAlpha(0.7 * alpha);
+      FA.draw.rect(0, 0, W, 40, '#000');
+      FA.draw.popAlpha();
+
+      FA.draw.pushAlpha(alpha);
+      FA.draw.text(msg.text, W / 2, 20, {
+        color: msg.color || colors.narrative,
+        size: 14,
+        align: 'center',
+        baseline: 'middle'
+      });
+      FA.draw.popAlpha();
+    }, 45);
+
+    // ========== LAYER: Game Over Screen (order 50) ==========
+    FA.addLayer('gameOverScreen', function() {
+      var state = FA.getState();
+      if (state.screen !== 'victory' && state.screen !== 'defeat') return;
+
+      var player = Player.getShip();
+      var scoring = FA.lookup('config', 'scoring');
+
+      // Overlay
+      FA.draw.pushAlpha(0.85);
+      FA.draw.rect(0, 0, W, H, '#000');
+      FA.draw.popAlpha();
+
+      // Title
+      var isVictory = state.screen === 'victory';
+      var titleText = isVictory ? 'VICTORY' : 'DEFEAT';
+      var titleColor = isVictory ? '#4f4' : '#f44';
+      FA.draw.text(titleText, W / 2, 150, { color: titleColor, size: 30, bold: true, align: 'center', baseline: 'middle' });
+
+      // Score breakdown
+      var visited = Object.keys(Player.getVisitedSystems()).length;
+      var minutes = Math.floor(player.gameTime / 60000);
+      var hasArtifact = FA.narrative && FA.narrative.getVar && FA.narrative.getVar('artifact_delivered');
+
+      var tradeScore = player.creditsEarned * scoring.creditMultiplier;
+      var systemScore = visited * scoring.systemsVisitedMultiplier;
+      var missionScore = player.missionsCompleted * scoring.missionsCompletedMultiplier;
+      var killScore = player.kills * scoring.killMultiplier;
+      var survivalScore = minutes * scoring.survivalPerMinute;
+      var artifactScore = hasArtifact ? scoring.artifactBonus : 0;
+      var totalScore = tradeScore + systemScore + missionScore + killScore + survivalScore + artifactScore;
+
+      var scoreY = 230;
+      var lineH = 25;
+      var leftX = W / 2 - 180;
+      var rightX = W / 2 + 180;
+
+      var lines = [
+        { label: 'Trade profit: ' + player.creditsEarned + ' x ' + scoring.creditMultiplier, value: tradeScore, color: '#fd4' },
+        { label: 'Systems visited: ' + visited + ' x ' + scoring.systemsVisitedMultiplier, value: systemScore, color: '#4af' },
+        { label: 'Missions completed: ' + player.missionsCompleted + ' x ' + scoring.missionsCompletedMultiplier, value: missionScore, color: '#c8b4ff' },
+        { label: 'Kills: ' + player.kills + ' x ' + scoring.killMultiplier, value: killScore, color: '#f84' },
+        { label: 'Survival: ' + minutes + ' min x ' + scoring.survivalPerMinute, value: survivalScore, color: '#4f4' }
+      ];
+
+      if (hasArtifact) {
+        lines.push({ label: 'Artifact bonus', value: '+' + artifactScore, color: '#f4f' });
+      }
+
+      for (var li = 0; li < lines.length; li++) {
+        var line = lines[li];
+        FA.draw.text(line.label, leftX, scoreY + li * lineH, { color: line.color, size: 13 });
+        FA.draw.text('= ' + line.value, rightX, scoreY + li * lineH, { color: '#fff', size: 13, align: 'right' });
+      }
+
+      // Total
+      var totalY = scoreY + lines.length * lineH + 15;
+      FA.draw.rect(leftX, totalY - 5, rightX - leftX, 2, '#555');
+      FA.draw.text('TOTAL', leftX, totalY + 5, { color: '#fff', size: 16, bold: true });
+      FA.draw.text(String(totalScore), rightX, totalY + 5, { color: titleColor, size: 16, bold: true, align: 'right' });
+
+      // Narrative ending text
+      var currentNodeId = FA.narrative ? FA.narrative.currentNode : null;
+      if (currentNodeId) {
+        var narText = FA.lookup('narrativeText', currentNodeId);
+        if (narText) {
+          FA.draw.text(narText.text, W / 2, totalY + 55, { color: narText.color, size: 13, align: 'center' });
+        }
+      }
+
+      // Restart prompt
+      if (Date.now() % 1000 < 700) {
+        FA.draw.text('[R] to restart', W / 2, 550, { color: '#aaa', size: 14, align: 'center', baseline: 'middle' });
+      }
+    }, 50);
+  }
+
+  // === EXPORT ===
+  window.Render = {
+    setup: setup
+  };
+})();
