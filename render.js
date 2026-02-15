@@ -309,7 +309,7 @@
         var dx = player.x - st.x;
         var dy = player.y - st.y;
         var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 60) {
+        if (dist < 60 && !Combat.isActive()) {
           FA.draw.text('SPACE to dock', stx, sty - 18, { color: '#4ef', size: 11, bold: true, align: 'center', baseline: 'middle' });
         }
       }
@@ -391,6 +391,29 @@
         c.fillStyle = colors.playerShip;
         c.fill();
       });
+
+      // Shield glow during combat
+      if (Combat.isActive() && player.shield > 0) {
+        var shieldAlpha = (player.shield / player.maxShield) * 0.5;
+        FA.draw.withAlpha(shieldAlpha, function() {
+          FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
+        });
+      }
+
+      // Effects (explosions) and floating text
+      var effects = FA.getEffects();
+      for (var efi = 0; efi < effects.length; efi++) {
+        var eff = effects[efi];
+        var efx = (eff.x || 0) - camX;
+        var efy = (eff.y || 0) - camY;
+        var efAlpha = FA.clamp(eff.life / (eff.maxLife || 1000), 0, 1);
+        if (eff.radius) {
+          FA.draw.withAlpha(efAlpha, function() {
+            FA.draw.circle(efx, efy, eff.radius, '#f84');
+          });
+        }
+      }
+      FA.drawFloats();
     }, 11);
 
     // ========== LAYER: Station Menu (order 20) ==========
@@ -635,10 +658,9 @@
       FA.draw.text('ESC to undock', W / 2, H - 30, { color: '#888', size: 12, align: 'center', baseline: 'middle' });
     }, 20);
 
-    // ========== LAYER: Combat Background (order 30) ==========
+    // ========== LAYER: Combat Background (order 30) — disabled ==========
     FA.addLayer('combatBg', function() {
-      var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'combat') return;
+      return; // Combat uses system view background
 
       var stars = state.starfield;
       var camX = FA.camera.x;
@@ -668,59 +690,13 @@
     // ========== LAYER: Combat Ships (order 31) ==========
     FA.addLayer('combatShips', function() {
       var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'combat') return;
+      if (state.screen !== 'playing' || state.view !== 'system_view' || !Combat.isActive()) return;
 
-      var player = Player.getShip();
       var camX = FA.camera.x;
       var camY = FA.camera.y;
       var ctx = FA.getCtx();
 
-      // Draw player ship
-      var px = player.x - camX;
-      var py = player.y - camY;
-
-      // Engine glow
-      if (FA.isHeld('up')) {
-        var ceSprite = typeof getSprite === 'function' && getSprite('effects', 'engineFlame');
-        if (ceSprite) {
-          var ceFrame = Math.floor(Date.now() / 150) % spriteFrames(ceSprite);
-          ctx.save();
-          ctx.translate(px, py);
-          ctx.rotate(player.angle);
-          drawSprite(ctx, ceSprite, -6, 5, 12, ceFrame);
-          ctx.restore();
-        } else {
-          ctx.save();
-          ctx.translate(px, py);
-          ctx.rotate(player.angle);
-          ctx.beginPath();
-          ctx.arc(0, 12, 5, 0, Math.PI * 2);
-          ctx.fillStyle = '#f84';
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      // Player ship sprite or fallback triangle
-      drawRotatedSprite(ctx, 'player', player.shipTypeId || 'shuttle', px, py, player.angle, SHIP_SIZE, function(c) {
-        c.beginPath();
-        c.moveTo(0, -12);
-        c.lineTo(-8, 8);
-        c.lineTo(8, 8);
-        c.closePath();
-        c.fillStyle = colors.playerShip;
-        c.fill();
-      });
-
-      // Shield glow
-      if (player.shield > 0) {
-        var shieldAlpha = (player.shield / player.maxShield) * 0.5;
-        FA.draw.withAlpha(shieldAlpha, function() {
-          FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
-        });
-      }
-
-      // Draw enemies
+      // Draw combat enemies
       var enemies = Combat.getEnemies();
       for (var e = 0; e < enemies.length; e++) {
         var en = enemies[e];
@@ -766,7 +742,7 @@
     // ========== LAYER: Combat Projectiles (order 32) ==========
     FA.addLayer('combatProjectiles', function() {
       var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'combat') return;
+      if (state.screen !== 'playing' || state.view !== 'system_view' || !Combat.isActive()) return;
 
       var projectiles = Combat.getProjectiles();
       var camX = FA.camera.x;
@@ -803,10 +779,9 @@
       }
     }, 32);
 
-    // ========== LAYER: Combat Effects (order 33) ==========
+    // ========== LAYER: Combat Effects (order 33) — disabled ==========
     FA.addLayer('combatEffects', function() {
-      var state = FA.getState();
-      if (state.screen !== 'playing' || state.view !== 'combat') return;
+      return; // Effects rendered in system view layer
 
       var effects = FA.getEffects();
       var camX = FA.camera.x;
@@ -869,6 +844,13 @@
         FA.draw.text(curSys.economy, 15, 28, { color: colors.hud, size: 10 });
       }
 
+      // Combat indicator
+      if (Combat.isActive()) {
+        var combatEnemies = Combat.getEnemies();
+        FA.draw.text('COMBAT', W / 2, 12, { color: '#f44', size: 14, bold: true, align: 'center' });
+        FA.draw.text('Enemies: ' + combatEnemies.length + ' | F to flee', W / 2, 28, { color: '#f84', size: 11, align: 'center' });
+      }
+
       // Top-right: credits
       FA.draw.text(player.credits + ' cr', W - 15, 12, { color: colors.credits, size: 14, bold: true, align: 'right' });
 
@@ -900,8 +882,8 @@
       // Control hints per view
       var hint = '';
       if (state.view === 'galaxy_map') hint = 'Arrows: select system | ENTER: jump | M: close map';
+      else if (state.view === 'system_view' && Combat.isActive()) hint = 'WASD: fly | SPACE: shoot | F: flee';
       else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: dock (near station) | M: galaxy map';
-      else if (state.view === 'combat') hint = 'WASD: fly | SPACE: shoot | F: flee';
       else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | ESC: sell/undock';
       if (hint) {
         FA.draw.text(hint, W / 2, H - 12, { color: '#556', size: 10, align: 'center' });

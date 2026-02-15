@@ -22,22 +22,17 @@
     _context = context || {};
     _context.kills = 0;
 
-    // Position player at center
+    // Keep player where they are (combat happens in system view)
     var player = Player.getShip();
-    player.x = 0;
-    player.y = 0;
-    player.vx = 0;
-    player.vy = 0;
-    player.angle = 0;
 
-    // Spread enemies at 400-600px radius around center
+    // Spread enemies around player's current position
     _enemies = [];
     _enemyCooldowns = [];
     for (var i = 0; i < enemies.length; i++) {
       var e = enemies[i];
       var shipDef = FA.lookup('shipTypes', e.shipType);
       var spawnAngle = (Math.PI * 2 * i) / enemies.length + (Math.random() - 0.5) * 0.5;
-      var spawnDist = FA.rand(400, 600);
+      var spawnDist = FA.rand(200, 350);
 
       _enemies.push({
         shipType: e.shipType,
@@ -50,8 +45,8 @@
         maxShield: e.maxShield || (shipDef ? shipDef.maxShield : 10),
         speed: shipDef ? shipDef.speed : 3,
         turnSpeed: shipDef ? shipDef.turnSpeed : 0.04,
-        x: Math.sin(spawnAngle) * spawnDist,
-        y: -Math.cos(spawnAngle) * spawnDist,
+        x: player.x + Math.sin(spawnAngle) * spawnDist,
+        y: player.y - Math.cos(spawnAngle) * spawnDist,
         vx: 0,
         vy: 0,
         angle: spawnAngle + Math.PI, // face center
@@ -71,28 +66,7 @@
 
     var player = Player.getShip();
 
-    // --- Player input ---
-    // Turn
-    if (FA.isHeld('left')) {
-      player.angle -= player.turnSpeed * dt;
-    }
-    if (FA.isHeld('right')) {
-      player.angle += player.turnSpeed * dt;
-    }
-
-    // Thrust
-    if (FA.isHeld('up')) {
-      player.vx += Math.sin(player.angle) * player.speed * 0.04;
-      player.vy -= Math.cos(player.angle) * player.speed * 0.04;
-    }
-
-    // Friction
-    player.vx *= 0.99;
-    player.vy *= 0.99;
-
-    // Position
-    player.x += player.vx;
-    player.y += player.vy;
+    // Player movement handled by system view
 
     // --- Player shooting ---
     if (FA.isHeld('shoot')) {
@@ -205,9 +179,6 @@
     for (var i = 0; i < _enemies.length; i++) {
       updateEnemyAI(_enemies[i], player, dt, i);
     }
-
-    // --- Shield recharge ---
-    Player.rechargeShield(dt);
 
     // --- Check win/lose ---
     if (_enemies.length === 0) {
@@ -350,7 +321,8 @@
     if (victory) {
       var reward = FA.rand(100, 400);
       Player.addCredits(reward, 'combat');
-      FA.addFloat(0, -30, '+' + reward + ' CR', '#fd4', 1500);
+      var p = Player.getShip();
+      FA.addFloat(p.x, p.y - 30, '+' + reward + ' CR', '#fd4', 1500);
       FA.emit('combat:end', { victory: true, kills: _context.kills || 0, credits: reward });
     } else {
       FA.emit('combat:end', { victory: false });

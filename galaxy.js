@@ -63,7 +63,7 @@
       var list = [];
       for (var s = 0; s < sys.stations; s++) {
         var angle = (s / sys.stations) * Math.PI * 2 + _rng.next() * 0.5;
-        var r = 100 + s * 70 + _rng.int(0, 30);
+        var r = 350 + s * 200 + _rng.int(0, 60);
         list.push({ name: sys.name + ' ' + _rng.pick(suffixes), x: Math.cos(angle) * r, y: Math.sin(angle) * r, orbitAngle: angle, orbitRadius: r });
       }
       _stations[i] = list;

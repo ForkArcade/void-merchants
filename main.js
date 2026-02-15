@@ -356,6 +356,12 @@
 
     // --- System View ---
     else if (state.view === 'system_view') {
+      // During combat: only flee allowed
+      if (Combat.isActive()) {
+        if (data.action === 'flee') Combat.flee();
+        return;
+      }
+
       if (data.action === 'map') {
         state.view = 'galaxy_map';
         state.selectedSystem = null;
@@ -497,14 +503,6 @@
       }
     }
 
-    // --- Combat ---
-    else if (state.view === 'combat') {
-      if (data.action === 'flee') {
-        if (Combat.flee()) {
-          state.view = 'system_view';
-        }
-      }
-    }
   });
 
   // === SCORE SUBMISSION ===
@@ -606,83 +604,74 @@
         }
       }
 
-      // Encounter system (pirate encounters)
+      // Encounter system (only when not already in combat)
       var currentSysData = Galaxy.getSystem(Player.getCurrentSystem());
-      state.encounterCooldown = (state.encounterCooldown || 0) - dt;
-      if (state.encounterCooldown <= 0 && currentSysData.danger > 0) {
-        var encounterChance = currentSysData.danger * 0.0001;
-        if (Math.random() < encounterChance) {
-          // Create pirate enemies
-          var enemyCount = FA.rand(1, Math.min(2, currentSysData.danger));
-          var enemies = [];
-          for (var e = 0; e < enemyCount; e++) {
-            enemies.push({
-              shipType: 'fighter',
-              faction: 'pirates',
-              ai: 'aggressive',
-              weapons: ['laser']
-            });
+      if (!Combat.isActive()) {
+        state.encounterCooldown = (state.encounterCooldown || 0) - dt;
+        if (state.encounterCooldown <= 0 && currentSysData.danger > 0) {
+          var encounterChance = currentSysData.danger * 0.0001;
+          if (Math.random() < encounterChance) {
+            var enemyCount = FA.rand(1, Math.min(2, currentSysData.danger));
+            var enemies = [];
+            for (var e = 0; e < enemyCount; e++) {
+              enemies.push({
+                shipType: 'fighter',
+                faction: 'pirates',
+                ai: 'aggressive',
+                weapons: ['laser']
+              });
+            }
+            Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
+            state.encounterCooldown = 8000;
+            triggerNarrative('pirate_encounter', 'pirate_encounter');
+          } else {
+            state.encounterCooldown = 1000;
           }
-          Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
-          state.view = 'combat';
-          state.encounterCooldown = 8000;
-
-          // Narrative trigger
-          triggerNarrative('pirate_encounter', 'pirate_encounter');
-          return;
         }
-        state.encounterCooldown = 1000; // check again in 1s
       }
 
       // Update NPCs
       if (state.npcs && state.npcs.length > 0) {
         updateNPCs(state.npcs, stations, player, dt);
 
-        // Hostile NPC proximity → combat trigger
-        for (var ni = state.npcs.length - 1; ni >= 0; ni--) {
-          var npc = state.npcs[ni];
-          if (!npc.hostile) continue;
-          var ndx = player.x - npc.x;
-          var ndy = player.y - npc.y;
-          var ndist = Math.sqrt(ndx * ndx + ndy * ndy);
-          if (ndist < 80) {
-            // Remove this NPC and start combat
-            var pirateShip = state.npcs.splice(ni, 1)[0];
-            var enemies = [{ shipType: pirateShip.shipType, faction: 'pirates', ai: 'aggressive', weapons: ['laser'] }];
-            // Add more pirates if danger is high
-            if (currentSysData.danger >= 3 && Math.random() < 0.5) {
-              enemies.push({ shipType: 'fighter', faction: 'pirates', ai: 'aggressive', weapons: ['laser'] });
+        // Hostile NPC proximity → combat trigger (only when not in combat)
+        if (!Combat.isActive()) {
+          for (var ni = state.npcs.length - 1; ni >= 0; ni--) {
+            var npc = state.npcs[ni];
+            if (!npc.hostile) continue;
+            var ndx = player.x - npc.x;
+            var ndy = player.y - npc.y;
+            var ndist = Math.sqrt(ndx * ndx + ndy * ndy);
+            if (ndist < 80) {
+              var pirateShip = state.npcs.splice(ni, 1)[0];
+              var enemies = [{ shipType: pirateShip.shipType, faction: 'pirates', ai: 'aggressive', weapons: ['laser'] }];
+              if (currentSysData.danger >= 3 && Math.random() < 0.5) {
+                enemies.push({ shipType: 'fighter', faction: 'pirates', ai: 'aggressive', weapons: ['laser'] });
+              }
+              Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
+              state.encounterCooldown = 8000;
+              triggerNarrative('pirate_encounter', 'pirate_encounter');
+              break;
             }
-            Combat.start(enemies, { systemId: Player.getCurrentSystem(), reason: 'pirate_attack' });
-            state.view = 'combat';
-            state.encounterCooldown = 8000;
-            triggerNarrative('pirate_encounter', 'pirate_encounter');
-            return;
           }
         }
       }
 
-      // Shield recharge outside combat
-      Player.rechargeShield(dt);
-    }
-
-    // --- Combat View ---
-    if (state.view === 'combat') {
-      Combat.update(dt);
-
-      // Check if combat ended
-      if (!Combat.isActive()) {
-        if (player.hull <= 0) {
-          showNarrative('defeat');
-          state.screen = 'defeat';
-          var score = Player.computeScore();
-          FA.emit('game:over', { victory: false, score: score });
-        } else {
-          state.view = 'system_view';
-          // Award kills to player
-          // (Combat module handles credit rewards)
+      // Combat update (combat happens in system view)
+      if (Combat.isActive()) {
+        Combat.update(dt);
+        if (!Combat.isActive()) {
+          if (player.hull <= 0) {
+            showNarrative('defeat');
+            state.screen = 'defeat';
+            var score = Player.computeScore();
+            FA.emit('game:over', { victory: false, score: score });
+          }
         }
       }
+
+      // Shield recharge
+      Player.rechargeShield(dt);
     }
 
     // --- Station View ---
