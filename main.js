@@ -58,6 +58,13 @@
     showNarrative(nodeId);
   }
 
+  // Contextual message (not tied to narrative graph, repeatable)
+  function showContextMessage(text, color) {
+    var state = FA.getState();
+    if (state.narrativeMessage && state.narrativeMessage.life > 1000) return;
+    state.narrativeMessage = { text: text, color: color || '#aaa', life: 4000, maxLife: 4000 };
+  }
+
   // === GAME START ===
   function startGame() {
     Galaxy.init(cfg.galaxySeed);
@@ -427,11 +434,32 @@
             if (visited === 2) triggerNarrative('first_jump', 'first_jump');
             if (visited >= 5) triggerNarrative('trader_life', 'trader_life');
 
-            // Warn about pirates on first encounter
+            // Contextual narrative on system entry
+            var hasHostile = false;
+            var hostileFaction = null;
             for (var npi = 0; npi < state.npcs.length; npi++) {
               if (state.npcs[npi].attitude === 'hostile') {
-                triggerNarrative('pirate_encounter', 'pirate_encounter');
-                break;
+                hasHostile = true;
+                hostileFaction = state.npcs[npi].faction;
+              }
+            }
+            if (hasHostile) {
+              if (hostileFaction === 'pirates') {
+                if (!narrativeFlags['pirate_encounter']) {
+                  triggerNarrative('pirate_encounter', 'pirate_encounter');
+                } else {
+                  var destDanger = Galaxy.getSystem(targetId);
+                  showContextMessage('Void Raider territory — danger level ' + (destDanger ? destDanger.danger : '?') + '.', '#f44');
+                }
+              } else if (hostileFaction) {
+                var hostFac = FA.lookup('factions', hostileFaction);
+                showContextMessage((hostFac ? hostFac.name : hostileFaction) + ' forces hostile — your reputation precedes you.', '#f84');
+              }
+            } else {
+              var destCtx = Galaxy.getSystem(targetId);
+              if (destCtx && destCtx.faction) {
+                var ctxFac = FA.lookup('factions', destCtx.faction);
+                if (ctxFac) showContextMessage(ctxFac.name + ' space. Scanning clear.', '#4af');
               }
             }
           }
@@ -764,12 +792,82 @@
       }
     }
 
-    // --- Reputation-based narrative triggers ---
+    // --- Narrative progression ---
+    // Full story arc: 4 acts, driven by gameplay milestones
+    var numVisited = Object.keys(Player.getVisitedSystems()).length;
+
+    // Act 2: Faction encounters (reputation-based)
     if (Player.getReputation('federation') > 10) {
       triggerNarrative('federation_contact', 'federation_contact');
     }
     if (Player.getReputation('merchants') > 10) {
       triggerNarrative('merchant_guild', 'merchant_guild');
+    }
+    if (Player.getReputation('rebels') > 10) {
+      triggerNarrative('rebel_sympathy', 'rebel_sympathy');
+    }
+
+    // Act 2: Events
+    if (player.kills >= 1 && narrativeFlags['pirate_encounter']) {
+      triggerNarrative('smuggler_offer', 'smuggler_offer');
+    }
+    if (numVisited >= 10 && narrativeFlags['trader_life']) {
+      triggerNarrative('distress_signal', 'distress_signal');
+    }
+    if (Player.getReputation('federation') > 30 || Player.getReputation('merchants') > 30 || Player.getReputation('rebels') > 30) {
+      triggerNarrative('faction_choice', 'faction_choice');
+    }
+
+    // Act 3: The Artifact
+    if (numVisited >= 12 && player.missionsCompleted >= 2 && narrativeFlags['faction_choice']) {
+      triggerNarrative('artifact_rumor', 'artifact_rumor');
+    }
+    if (narrativeFlags['artifact_rumor'] && state.view === 'station') {
+      var artSys = Galaxy.getSystem(Player.getCurrentSystem());
+      if (artSys && artSys.faction === 'scientists') {
+        triggerNarrative('artifact_found', 'artifact_found');
+      }
+    }
+    if (narrativeFlags['artifact_found']) {
+      var dangerSys = Galaxy.getSystem(Player.getCurrentSystem());
+      if (dangerSys && dangerSys.danger >= 2) {
+        triggerNarrative('artifact_hunted', 'artifact_hunted');
+      }
+    }
+    if (narrativeFlags['artifact_hunted'] && state.view === 'station') {
+      triggerNarrative('artifact_decision', 'artifact_decision');
+    }
+
+    // Act 4: Climax
+    if (narrativeFlags['artifact_decision'] && player.kills >= 5) {
+      triggerNarrative('pirate_king', 'pirate_king');
+    }
+    if (narrativeFlags['pirate_king'] && numVisited >= 18) {
+      triggerNarrative('final_run', 'final_run');
+    }
+    if (narrativeFlags['final_run'] && state.view === 'station') {
+      var finalSys = Galaxy.getSystem(Player.getCurrentSystem());
+      if (finalSys && finalSys.faction === 'scientists') {
+        triggerNarrative('delivery', 'delivery');
+      }
+    }
+
+    // Victory: after delivery, end game
+    if (narrativeFlags['delivery']) {
+      if (!state.victoryTimer) {
+        state.victoryTimer = 5000;
+        if (Player.getReputation('scientists') > Player.getReputation('merchants')) {
+          showNarrative('victory_science');
+        } else {
+          showNarrative('victory_power');
+        }
+      }
+      state.victoryTimer -= dt;
+      if (state.victoryTimer <= 0) {
+        state.screen = 'victory';
+        var victoryScore = Player.computeScore();
+        FA.emit('game:over', { victory: true, score: victoryScore });
+      }
     }
 
     FA.clearInput();
