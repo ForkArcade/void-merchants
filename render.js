@@ -5,6 +5,34 @@
   'use strict';
   var FA = window.FA;
 
+  var SHIP_SIZE = 24;
+  var STATION_SIZE = 20;
+  var PROJ_SIZE = 12;
+
+  // Draw a sprite centered and rotated; falls back to fallbackFn if no sprite found
+  function drawRotatedSprite(ctx, category, name, x, y, angle, size, fallbackFn) {
+    var sprite = typeof getSprite === 'function' && getSprite(category, name);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (sprite) {
+      drawSprite(ctx, sprite, -size / 2, -size / 2, size);
+    } else {
+      fallbackFn(ctx);
+    }
+    ctx.restore();
+  }
+
+  // Draw a static sprite centered; falls back to fallbackFn
+  function drawStaticSprite(ctx, category, name, x, y, size, fallbackFn, frame) {
+    var sprite = typeof getSprite === 'function' && getSprite(category, name);
+    if (sprite) {
+      drawSprite(ctx, sprite, x - size / 2, y - size / 2, size, frame);
+    } else {
+      fallbackFn(ctx);
+    }
+  }
+
   function setup() {
     var cfg = FA.lookup('config', 'game');
     var colors = FA.lookup('config', 'colors');
@@ -268,9 +296,11 @@
         var stx = st.x - camX;
         var sty = st.y - camY;
 
-        // Station square
-        FA.draw.rect(stx - 6, sty - 6, 12, 12, '#88a');
-        FA.draw.strokeRect(stx - 7, sty - 7, 14, 14, '#aac', 1);
+        // Station sprite or fallback square
+        drawStaticSprite(ctx, 'ui', 'station', stx, sty, STATION_SIZE, function() {
+          FA.draw.rect(stx - 6, sty - 6, 12, 12, '#88a');
+          FA.draw.strokeRect(stx - 7, sty - 7, 14, 14, '#aac', 1);
+        });
 
         // Station name
         FA.draw.text(st.name, stx, sty + 12, { color: '#667', size: 9, align: 'center', baseline: 'top' });
@@ -290,28 +320,36 @@
 
       // Engine glow if thrusting
       if (FA.isHeld('up')) {
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(player.angle);
-        ctx.beginPath();
-        ctx.arc(0, 10, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#f84';
-        ctx.fill();
-        ctx.restore();
+        var eSprite = typeof getSprite === 'function' && getSprite('effects', 'engineFlame');
+        if (eSprite) {
+          var eFrame = Math.floor(Date.now() / 150) % spriteFrames(eSprite);
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          drawSprite(ctx, eSprite, -6, 4, 12, eFrame);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          ctx.beginPath();
+          ctx.arc(0, 10, 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#f84';
+          ctx.fill();
+          ctx.restore();
+        }
       }
 
-      // Ship triangle
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(player.angle);
-      ctx.beginPath();
-      ctx.moveTo(0, -12);
-      ctx.lineTo(-8, 8);
-      ctx.lineTo(8, 8);
-      ctx.closePath();
-      ctx.fillStyle = colors.playerShip;
-      ctx.fill();
-      ctx.restore();
+      // Player ship sprite or fallback triangle
+      drawRotatedSprite(ctx, 'player', player.shipTypeId || 'shuttle', px, py, player.angle, SHIP_SIZE, function(c) {
+        c.beginPath();
+        c.moveTo(0, -12);
+        c.lineTo(-8, 8);
+        c.lineTo(8, 8);
+        c.closePath();
+        c.fillStyle = colors.playerShip;
+        c.fill();
+      });
     }, 11);
 
     // ========== LAYER: Station Menu (order 20) ==========
@@ -602,28 +640,36 @@
 
       // Engine glow
       if (FA.isHeld('up')) {
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(player.angle);
-        ctx.beginPath();
-        ctx.arc(0, 12, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#f84';
-        ctx.fill();
-        ctx.restore();
+        var ceSprite = typeof getSprite === 'function' && getSprite('effects', 'engineFlame');
+        if (ceSprite) {
+          var ceFrame = Math.floor(Date.now() / 150) % spriteFrames(ceSprite);
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          drawSprite(ctx, ceSprite, -6, 5, 12, ceFrame);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(player.angle);
+          ctx.beginPath();
+          ctx.arc(0, 12, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#f84';
+          ctx.fill();
+          ctx.restore();
+        }
       }
 
-      // Player ship triangle
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(player.angle);
-      ctx.beginPath();
-      ctx.moveTo(0, -12);
-      ctx.lineTo(-8, 8);
-      ctx.lineTo(8, 8);
-      ctx.closePath();
-      ctx.fillStyle = colors.playerShip;
-      ctx.fill();
-      ctx.restore();
+      // Player ship sprite or fallback triangle
+      drawRotatedSprite(ctx, 'player', player.shipTypeId || 'shuttle', px, py, player.angle, SHIP_SIZE, function(c) {
+        c.beginPath();
+        c.moveTo(0, -12);
+        c.lineTo(-8, 8);
+        c.lineTo(8, 8);
+        c.closePath();
+        c.fillStyle = colors.playerShip;
+        c.fill();
+      });
 
       // Shield glow
       if (player.shield > 0) {
@@ -647,18 +693,20 @@
           if (eFac) eColor = eFac.color;
         }
 
-        // Enemy triangle
-        ctx.save();
-        ctx.translate(ex, ey);
-        ctx.rotate(en.angle || 0);
-        ctx.beginPath();
-        ctx.moveTo(0, -10);
-        ctx.lineTo(-7, 7);
-        ctx.lineTo(7, 7);
-        ctx.closePath();
-        ctx.fillStyle = eColor;
-        ctx.fill();
-        ctx.restore();
+        // Enemy sprite or fallback triangle
+        var enemySpriteName = en.faction === 'pirates' ? (en.shipType === 'corvette' ? 'pirateHeavy' : 'pirate') :
+                              en.faction === 'federation' ? 'militaryPatrol' :
+                              en.faction === 'rebels' ? 'rebelFighter' :
+                              en.faction === 'scientists' ? 'bountyHunter' : 'pirate';
+        drawRotatedSprite(ctx, 'enemies', enemySpriteName, ex, ey, en.angle || 0, SHIP_SIZE, function(c) {
+          c.beginPath();
+          c.moveTo(0, -10);
+          c.lineTo(-7, 7);
+          c.lineTo(7, 7);
+          c.closePath();
+          c.fillStyle = eColor;
+          c.fill();
+        });
 
         // Health bar above enemy
         var hpRatio = en.hull / (en.maxHull || 1);
@@ -689,18 +737,28 @@
         var px = p.x - camX;
         var py = p.y - camY;
 
-        // Draw projectile as a short line in the direction of travel
-        var len = 4;
-        var speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-        var nx = speed > 0 ? p.vx / speed : 0;
-        var ny = speed > 0 ? p.vy / speed : 0;
-
-        ctx.strokeStyle = p.color || '#0ff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(px - nx * len, py - ny * len);
-        ctx.lineTo(px + nx * len, py + ny * len);
-        ctx.stroke();
+        // Projectile sprite or fallback line
+        var projAngle = Math.atan2(p.vx, -p.vy);
+        var projName = (p.char === '*') ? 'missile' : 'laser';
+        var projSprite = typeof getSprite === 'function' && getSprite('effects', projName);
+        if (projSprite) {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(projAngle);
+          drawSprite(ctx, projSprite, -PROJ_SIZE / 2, -PROJ_SIZE / 2, PROJ_SIZE);
+          ctx.restore();
+        } else {
+          var len = 4;
+          var speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+          var nx = speed > 0 ? p.vx / speed : 0;
+          var ny = speed > 0 ? p.vy / speed : 0;
+          ctx.strokeStyle = p.color || '#0ff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(px - nx * len, py - ny * len);
+          ctx.lineTo(px + nx * len, py + ny * len);
+          ctx.stroke();
+        }
       }
     }, 32);
 
@@ -713,23 +771,39 @@
       var camX = FA.camera.x;
       var camY = FA.camera.y;
 
+      var ctx = FA.getCtx();
       for (var i = 0; i < effects.length; i++) {
         var eff = effects[i];
         var ex = (eff.x || 0) - camX;
         var ey = (eff.y || 0) - camY;
         var alpha = FA.clamp(eff.life / (eff.maxLife || 1000), 0, 1);
 
-        if (eff.type === 'explosion') {
-          var radius = (1 - alpha) * (eff.radius || 20);
-          FA.draw.withAlpha(alpha, function() {
-            FA.draw.circle(ex, ey, radius, eff.color || '#f84');
-          });
+        if (eff.type === 'explosion' || eff.radius) {
+          var explSprite = typeof getSprite === 'function' && getSprite('effects', 'explosion');
+          if (explSprite) {
+            var explFrame = alpha > 0.5 ? 0 : 1;
+            var explSize = 16 + (1 - alpha) * 24;
+            FA.draw.withAlpha(alpha, function() {
+              drawSprite(ctx, explSprite, ex - explSize / 2, ey - explSize / 2, explSize, explFrame);
+            });
+          } else {
+            var radius = (1 - alpha) * (eff.radius || 20);
+            FA.draw.withAlpha(alpha, function() {
+              FA.draw.circle(ex, ey, radius, eff.color || '#f84');
+            });
+          }
         } else if (eff.type === 'shieldHit') {
-          FA.draw.withAlpha(alpha * 0.6, function() {
-            FA.draw.strokeCircle(ex, ey, eff.radius || 18, '#4ff', 2);
-          });
+          var shieldSprite = typeof getSprite === 'function' && getSprite('effects', 'shieldHit');
+          if (shieldSprite) {
+            FA.draw.withAlpha(alpha * 0.6, function() {
+              drawSprite(ctx, shieldSprite, ex - 12, ey - 12, 24);
+            });
+          } else {
+            FA.draw.withAlpha(alpha * 0.6, function() {
+              FA.draw.strokeCircle(ex, ey, eff.radius || 18, '#4ff', 2);
+            });
+          }
         } else {
-          // Generic particle
           FA.draw.withAlpha(alpha, function() {
             FA.draw.circle(ex, ey, 2, eff.color || '#fff');
           });
