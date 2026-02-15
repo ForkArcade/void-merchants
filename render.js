@@ -134,9 +134,9 @@
           }
         }
         if (maxDist > 0) {
-          FA.draw.withAlpha(0.3, function() {
-            FA.draw.strokeCircle(curX, curY, maxDist * scale + 10, colors.fuelRange, 2);
-          });
+          FA.draw.pushAlpha(0.3);
+          FA.draw.strokeCircle(curX, curY, maxDist * scale + 10, colors.fuelRange, 2);
+          FA.draw.popAlpha();
         }
       }
 
@@ -166,10 +166,9 @@
 
         // Player's current system: pulsing ring
         if (i === player.currentSystem) {
-          var pulseAlpha = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
-          FA.draw.withAlpha(pulseAlpha, function() {
-            FA.draw.strokeCircle(sx, sy, radius + 6, '#4ef', 2);
-          });
+          FA.draw.pushAlpha(Math.sin(Date.now() * 0.005) * 0.3 + 0.7);
+          FA.draw.strokeCircle(sx, sy, radius + 6, '#4ef', 2);
+          FA.draw.popAlpha();
         }
       }
     }, 2);
@@ -190,9 +189,9 @@
       var ph = 180;
 
       // Panel background
-      FA.draw.withAlpha(0.85, function() {
-        FA.draw.rect(px, py, pw, ph, '#000510');
-      });
+      FA.draw.pushAlpha(0.85);
+      FA.draw.rect(px, py, pw, ph, '#000510');
+      FA.draw.popAlpha();
       FA.draw.strokeRect(px, py, pw, ph, '#334', 1);
 
       // System name
@@ -244,23 +243,17 @@
       var state = FA.getState();
       if (state.screen !== 'playing' || state.view !== 'system_view') return;
 
-      var stars = state.starfield;
-      if (!stars) return;
+      var starCanvas = state.starfield;
+      if (!starCanvas) return;
 
       var ctx = FA.getCtx();
       var camX = FA.camera.x;
       var camY = FA.camera.y;
 
-      // Draw starfield with parallax
-      for (var i = 0; i < stars.length; i++) {
-        var s = stars[i];
-        var sx = ((s.x - camX * 0.3) % (W * 3) + W * 3) % (W * 3) - W;
-        var sy = ((s.y - camY * 0.3) % (H * 3) + H * 3) % (H * 3) - H;
-        if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
-        FA.draw.withAlpha(s.brightness, function() {
-          FA.draw.circle(sx, sy, s.size, colors.starfield);
-        });
-      }
+      // Blit pre-rendered starfield with parallax (1 drawImage vs 200 arcs)
+      var pxOff = ((-(camX * 0.3) % (W * 3)) + W * 3) % (W * 3) - W;
+      var pyOff = ((-(camY * 0.3) % (H * 3)) + H * 3) % (H * 3) - H;
+      ctx.drawImage(starCanvas, pxOff, pyOff);
 
       // Draw central star
       var starX = 0 - camX;
@@ -281,19 +274,18 @@
       // Draw station orbit paths
       var player = Player.getShip();
       var orbitStations = Galaxy.getStations(player.currentSystem);
+      var osx = 0 - camX;
+      var osy = 0 - camY;
       ctx.setLineDash([4, 8]);
+      FA.draw.pushAlpha(0.12);
+      ctx.strokeStyle = '#4af';
+      ctx.lineWidth = 1;
       for (var oi = 0; oi < orbitStations.length; oi++) {
-        var orb = orbitStations[oi];
-        var osx = 0 - camX;
-        var osy = 0 - camY;
-        FA.draw.withAlpha(0.12, function() {
-          ctx.strokeStyle = '#4af';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(osx, osy, orb.orbitRadius, 0, Math.PI * 2);
-          ctx.stroke();
-        });
+        ctx.beginPath();
+        ctx.arc(osx, osy, orbitStations[oi].orbitRadius, 0, Math.PI * 2);
+        ctx.stroke();
       }
+      FA.draw.popAlpha();
       ctx.setLineDash([]);
     }, 10);
 
@@ -369,9 +361,9 @@
           var hpR = npc.hull / (npc.maxHull || 1);
           FA.draw.bar(nx - 15, ny - 18, 30, 3, hpR, hpR > 0.3 ? '#f84' : '#f44', '#222');
           if (npc.shield > 0) {
-            FA.draw.withAlpha((npc.shield / (npc.maxShield || 1)) * 0.4, function() {
-              FA.draw.strokeCircle(nx, ny, 15, '#8ff', 1);
-            });
+            FA.draw.pushAlpha((npc.shield / (npc.maxShield || 1)) * 0.4);
+            FA.draw.strokeCircle(nx, ny, 15, '#8ff', 1);
+            FA.draw.popAlpha();
           }
         }
       }
@@ -415,10 +407,9 @@
 
       // Shield glow when damaged
       if (player.shield > 0 && player.shield < player.maxShield) {
-        var shieldAlpha = (player.shield / player.maxShield) * 0.5;
-        FA.draw.withAlpha(shieldAlpha, function() {
-          FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
-        });
+        FA.draw.pushAlpha((player.shield / player.maxShield) * 0.5);
+        FA.draw.strokeCircle(px, py, 18, colors.shieldBar, 2);
+        FA.draw.popAlpha();
       }
 
       // Effects (explosions) and floating text
@@ -429,9 +420,9 @@
         var efy = (eff.y || 0) - camY;
         var efAlpha = FA.clamp(eff.life / (eff.maxLife || 1000), 0, 1);
         if (eff.radius) {
-          FA.draw.withAlpha(efAlpha, function() {
-            FA.draw.circle(efx, efy, eff.radius, '#f84');
-          });
+          FA.draw.pushAlpha(efAlpha);
+          FA.draw.circle(efx, efy, eff.radius, '#f84');
+          FA.draw.popAlpha();
         }
       }
       FA.drawFloats();
@@ -446,9 +437,9 @@
       var ctx = FA.getCtx();
 
       // Dark background overlay
-      FA.draw.withAlpha(0.92, function() {
-        FA.draw.rect(0, 0, W, H, '#000510');
-      });
+      FA.draw.pushAlpha(0.92);
+      FA.draw.rect(0, 0, W, H, '#000510');
+      FA.draw.popAlpha();
 
       // Station name header
       var stations = Galaxy.getStations(player.currentSystem);
@@ -925,18 +916,18 @@
       var msg = state.narrativeMessage;
       var alpha = FA.clamp(msg.life / msg.maxLife, 0, 1);
 
-      FA.draw.withAlpha(0.7 * alpha, function() {
-        FA.draw.rect(0, 0, W, 40, '#000');
-      });
+      FA.draw.pushAlpha(0.7 * alpha);
+      FA.draw.rect(0, 0, W, 40, '#000');
+      FA.draw.popAlpha();
 
-      FA.draw.withAlpha(alpha, function() {
-        FA.draw.text(msg.text, W / 2, 20, {
-          color: msg.color || colors.narrative,
-          size: 14,
-          align: 'center',
-          baseline: 'middle'
-        });
+      FA.draw.pushAlpha(alpha);
+      FA.draw.text(msg.text, W / 2, 20, {
+        color: msg.color || colors.narrative,
+        size: 14,
+        align: 'center',
+        baseline: 'middle'
       });
+      FA.draw.popAlpha();
     }, 45);
 
     // ========== LAYER: Game Over Screen (order 50) ==========
@@ -948,9 +939,9 @@
       var scoring = FA.lookup('config', 'scoring');
 
       // Overlay
-      FA.draw.withAlpha(0.85, function() {
-        FA.draw.rect(0, 0, W, H, '#000');
-      });
+      FA.draw.pushAlpha(0.85);
+      FA.draw.rect(0, 0, W, H, '#000');
+      FA.draw.popAlpha();
 
       // Title
       var isVictory = state.screen === 'victory';

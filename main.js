@@ -280,18 +280,26 @@
     npc.y += npc.vy;
   }
 
-  // Generate random starfield for background rendering
+  // Generate starfield as pre-rendered offscreen canvas (1 drawImage vs 200 arcs/frame)
   function generateStarfield(count) {
-    var stars = [];
+    var sw = W * 3, sh = H * 3;
+    var offscreen = document.createElement('canvas');
+    offscreen.width = sw;
+    offscreen.height = sh;
+    var octx = offscreen.getContext('2d');
     for (var i = 0; i < count; i++) {
-      stars.push({
-        x: FA.rand(0, W * 3),
-        y: FA.rand(0, H * 3),
-        size: Math.random() * 2 + 0.5,
-        brightness: Math.random() * 0.5 + 0.5
-      });
+      var sx = Math.floor(Math.random() * sw);
+      var sy = Math.floor(Math.random() * sh);
+      var size = Math.random() * 2 + 0.5;
+      var brightness = Math.random() * 0.5 + 0.5;
+      octx.globalAlpha = brightness;
+      octx.fillStyle = colors.starfield;
+      octx.beginPath();
+      octx.arc(sx, sy, size, 0, Math.PI * 2);
+      octx.fill();
     }
-    return stars;
+    octx.globalAlpha = 1;
+    return offscreen;
   }
 
   // === HELPERS ===
