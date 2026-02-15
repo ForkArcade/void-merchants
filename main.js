@@ -27,6 +27,7 @@
   FA.bindKey('tab3',     ['3']);
   FA.bindKey('tab4',     ['4']);
   FA.bindKey('tab5',     ['5']);
+  FA.bindKey('sell',     ['q']);
 
   // === NARRATIVE FLAGS ===
   // Track which narrative triggers have already fired so they only fire once
@@ -500,27 +501,27 @@
     // --- Station ---
     else if (state.view === 'station') {
       if (data.action === 'back') {
-        // If on trade tab and player has cargo of selected commodity, sell 1
-        if (state.stationTab === 0) {
-          var comList = getCommodityList();
-          if (state.menuIndex < comList.length) {
-            var selCom = comList[state.menuIndex];
-            var qty = playerCargoQty(selCom.id);
-            if (qty > 0) {
-              var sys = Galaxy.getSystem(Player.getCurrentSystem());
-              var sellPrice = Galaxy.getSellPrice(selCom.id, sys);
-              if (Player.sellCommodity(selCom.id, 1, sellPrice)) {
-                FA.playSound('trade');
-                // First trade narrative trigger
-                triggerNarrative('first_trade', 'first_trade');
-              }
-              return;
+        // ESC always undocks
+        state.view = 'system_view';
+        state.dockStation = null;
+        return;
+      }
+
+      // Sell 1 unit of selected commodity (Q key)
+      if (data.action === 'sell' && state.stationTab === 0) {
+        var comList = getCommodityList();
+        if (state.menuIndex < comList.length) {
+          var selCom = comList[state.menuIndex];
+          var qty = playerCargoQty(selCom.id);
+          if (qty > 0) {
+            var sys = Galaxy.getSystem(Player.getCurrentSystem());
+            var sellPrice = Galaxy.getSellPrice(selCom.id, sys);
+            if (Player.sellCommodity(selCom.id, 1, sellPrice)) {
+              FA.playSound('trade');
+              triggerNarrative('first_trade', 'first_trade');
             }
           }
         }
-        // Undock
-        state.view = 'system_view';
-        state.dockStation = null;
         return;
       }
 
@@ -659,6 +660,134 @@
         }
         if (bestId !== null) {
           state.selectedSystem = bestId;
+        }
+      }
+    }
+
+    // --- Station View (mouse) ---
+    if (state.view === 'station') {
+      var click = FA.consumeClick();
+      if (click) {
+        var tabW = 180, tabH = 30;
+        var tabStartX = (W - tabW * 5) / 2;
+        var tabY = 55;
+        var contentY = 105;
+        var contentX = 60;
+
+        // Click on tabs
+        if (click.y >= tabY && click.y <= tabY + tabH) {
+          for (var t = 0; t < 5; t++) {
+            var tx = tabStartX + t * tabW;
+            if (click.x >= tx && click.x <= tx + tabW - 2) {
+              state.stationTab = t;
+              state.menuIndex = 0;
+              break;
+            }
+          }
+        }
+
+        // Trade tab — click on rows, buy/sell buttons
+        if (state.stationTab === 0) {
+          var comList = getCommodityList();
+          for (var ci = 0; ci < comList.length; ci++) {
+            var rowY = contentY + 25 + ci * 28;
+            if (click.y >= rowY - 3 && click.y <= rowY + 21) {
+              state.menuIndex = ci;
+              // Click on BUY button area (contentX+455 to contentX+510)
+              if (click.x >= contentX + 455 && click.x <= contentX + 515) {
+                var currentSysObj = Galaxy.getSystem(Player.getCurrentSystem());
+                var buyPrice = Galaxy.getBuyPrice(comList[ci].id, currentSysObj);
+                if (Player.buyCommodity(comList[ci].id, 1, buyPrice)) {
+                  FA.playSound('trade');
+                }
+              }
+              // Click on SELL button area (contentX+530 to contentX+590)
+              if (click.x >= contentX + 530 && click.x <= contentX + 590) {
+                var qty = playerCargoQty(comList[ci].id);
+                if (qty > 0) {
+                  var sys = Galaxy.getSystem(Player.getCurrentSystem());
+                  var sellPrice = Galaxy.getSellPrice(comList[ci].id, sys);
+                  if (Player.sellCommodity(comList[ci].id, 1, sellPrice)) {
+                    FA.playSound('trade');
+                    triggerNarrative('first_trade', 'first_trade');
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        // Missions tab — click to select + accept
+        if (state.stationTab === 3) {
+          var availMissions = state.availableMissions || [];
+          for (var mi = 0; mi < availMissions.length; mi++) {
+            var mRowY = contentY + 30 + mi * 40;
+            if (click.y >= mRowY - 3 && click.y <= mRowY + 33) {
+              state.menuIndex = mi;
+              if (Player.acceptMission(availMissions[mi])) {
+                state.availableMissions.splice(mi, 1);
+                if (state.menuIndex >= getMenuItemCount(state) && state.menuIndex > 0) {
+                  state.menuIndex--;
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        // Fuel tab — click "refuel" button
+        if (state.stationTab === 2) {
+          if (click.y >= contentY + 175 && click.y <= contentY + 210) {
+            var currentSysObj = Galaxy.getSystem(Player.getCurrentSystem());
+            var ship = Player.getShip();
+            var fuelPrice = Math.round(cfg.fuelPriceBase * (1 + currentSysObj.danger * 0.1));
+            var fuelNeeded = ship.maxFuel - ship.fuel;
+            if (fuelNeeded > 0) {
+              Player.refuel(fuelNeeded, fuelPrice);
+            }
+          }
+        }
+
+        // Repair tab — click "repair" button
+        if (state.stationTab === 4) {
+          if (click.y >= contentY + 175 && click.y <= contentY + 210) {
+            var currentSysObj = Galaxy.getSystem(Player.getCurrentSystem());
+            var ship = Player.getShip();
+            var repairPrice = Math.round(10 * (1 + currentSysObj.techLevel * 0.05));
+            var repairNeeded = ship.maxHull - ship.hull;
+            if (repairNeeded > 0) {
+              Player.repairHull(repairNeeded, repairPrice);
+            }
+          }
+        }
+
+        // Shipyard tab — click to select ship/weapon
+        if (state.stationTab === 1) {
+          var ships = getShipList();
+          var weapons = getWeaponList();
+          for (var si = 0; si < ships.length; si++) {
+            var sRowY = contentY + 25 + si * 26;
+            if (click.y >= sRowY - 3 && click.y <= sRowY + 19) {
+              state.menuIndex = si;
+              var ship = Player.getShip();
+              if (ships[si].id !== ship.shipTypeId) {
+                Player.buyShip(ships[si].id);
+              }
+              break;
+            }
+          }
+          var weaponY = contentY + 25 + ships.length * 26 + 20;
+          for (var wi = 0; wi < weapons.length; wi++) {
+            var wRowY = weaponY + 22 + wi * 22;
+            if (click.y >= wRowY - 3 && click.y <= wRowY + 19) {
+              state.menuIndex = ships.length + wi;
+              var ship = Player.getShip();
+              var slot = ship.weapons.length < ship.weaponSlots ? ship.weapons.length : 0;
+              Player.buyWeapon(weapons[wi].id, slot);
+              break;
+            }
+          }
         }
       }
     }

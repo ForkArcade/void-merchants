@@ -453,13 +453,15 @@
       var tabStartX = (W - tabW * 5) / 2;
       var tabY = 55;
 
+      var tabMouse = FA.getMouse();
       for (var t = 0; t < 5; t++) {
         var tx = tabStartX + t * tabW;
         var isActive = state.stationTab === t;
-        FA.draw.rect(tx, tabY, tabW - 2, tabH, isActive ? '#224' : '#111');
-        FA.draw.strokeRect(tx, tabY, tabW - 2, tabH, isActive ? '#4ef' : '#333', 1);
+        var isTabHover = !isActive && tabMouse.y >= tabY && tabMouse.y <= tabY + tabH && tabMouse.x >= tx && tabMouse.x <= tx + tabW - 2;
+        FA.draw.rect(tx, tabY, tabW - 2, tabH, isActive ? '#224' : (isTabHover ? '#1a1a2a' : '#111'));
+        FA.draw.strokeRect(tx, tabY, tabW - 2, tabH, isActive ? '#4ef' : (isTabHover ? '#6af' : '#333'), 1);
         FA.draw.text((t + 1) + '. ' + tabNames[t], tx + tabW / 2 - 1, tabY + tabH / 2, {
-          color: isActive ? '#4ef' : '#888',
+          color: isActive ? '#4ef' : (isTabHover ? '#adf' : '#888'),
           size: 12,
           bold: isActive,
           align: 'center',
@@ -476,6 +478,9 @@
         var commodities = FA.lookupAll('commodities');
         var cids = Object.keys(commodities);
 
+        // Mouse hover detection
+        var mouse = FA.getMouse();
+
         // Column headers
         FA.draw.text('Commodity', contentX, contentY, { color: '#888', size: 11 });
         FA.draw.text('Buy', contentX + 200, contentY, { color: '#888', size: 11, align: 'center' });
@@ -487,20 +492,21 @@
           var com = commodities[cid];
           var rowY = contentY + 25 + ci * 28;
           var isSelected = state.menuIndex === ci;
+          var isHovered = mouse.y >= rowY - 3 && mouse.y <= rowY + 21 && mouse.x >= contentX - 5 && mouse.x <= contentX + 600;
 
           if (isSelected) {
-            FA.draw.rect(contentX - 5, rowY - 3, 500, 24, 'rgba(78,238,255,0.08)');
+            FA.draw.rect(contentX - 5, rowY - 3, 600, 24, 'rgba(78,238,255,0.08)');
+          } else if (isHovered) {
+            FA.draw.rect(contentX - 5, rowY - 3, 600, 24, 'rgba(78,238,255,0.04)');
           }
 
-          FA.draw.text(com.name, contentX, rowY, { color: isSelected ? '#fff' : '#ccc', size: 12 });
+          FA.draw.text(com.name, contentX, rowY, { color: isSelected ? '#fff' : (isHovered ? '#ddd' : '#ccc'), size: 12 });
 
           var buyP = curSys ? Galaxy.getBuyPrice(cid, curSys) : 0;
           var sellP = curSys ? Galaxy.getSellPrice(cid, curSys) : 0;
           FA.draw.text(buyP + 'cr', contentX + 200, rowY, { color: '#fd4', size: 12, align: 'center' });
 
-          // Color sell price: green if sell > buy (profit when buying here), red if less
-          var sellColor = sellP > buyP ? colors.profit : (sellP < buyP ? colors.loss : '#ccc');
-          FA.draw.text(sellP + 'cr', contentX + 300, rowY, { color: sellColor, size: 12, align: 'center' });
+          FA.draw.text(sellP + 'cr', contentX + 300, rowY, { color: '#ccc', size: 12, align: 'center' });
 
           // Player cargo quantity
           var cargoQty = 0;
@@ -509,6 +515,20 @@
             if (cargo[cg].id === cid) { cargoQty = cargo[cg].quantity; break; }
           }
           FA.draw.text(cargoQty > 0 ? String(cargoQty) : '-', contentX + 400, rowY, { color: cargoQty > 0 ? '#fff' : '#444', size: 12, align: 'center' });
+
+          // BUY button
+          var canBuy = player.credits >= buyP && (player.cargo.reduce(function(s, c) { return s + c.quantity; }, 0) < player.maxCargo);
+          var buyBtnHover = isHovered && mouse.x >= contentX + 455 && mouse.x <= contentX + 515;
+          FA.draw.rect(contentX + 455, rowY - 2, 55, 20, buyBtnHover && canBuy ? '#264' : '#112');
+          FA.draw.strokeRect(contentX + 455, rowY - 2, 55, 20, canBuy ? '#4a4' : '#333', 1);
+          FA.draw.text('BUY', contentX + 482, rowY + 8, { color: canBuy ? (buyBtnHover ? '#6f6' : '#4a4') : '#333', size: 10, align: 'center', baseline: 'middle' });
+
+          // SELL button
+          var hasCargo = cargoQty > 0;
+          var sellBtnHover = isHovered && mouse.x >= contentX + 530 && mouse.x <= contentX + 590;
+          FA.draw.rect(contentX + 530, rowY - 2, 55, 20, sellBtnHover && hasCargo ? '#432' : '#112');
+          FA.draw.strokeRect(contentX + 530, rowY - 2, 55, 20, hasCargo ? '#fa0' : '#333', 1);
+          FA.draw.text('SELL', contentX + 557, rowY + 8, { color: hasCargo ? (sellBtnHover ? '#fc4' : '#fa0') : '#333', size: 10, align: 'center', baseline: 'middle' });
         }
 
         // Trade route hints
@@ -584,7 +604,7 @@
       // --- Tab 2: Fuel ---
       if (state.stationTab === 2) {
         var fuelPriceBase = cfg.fuelPriceBase;
-        var fuelPrice = curSys ? Math.round(fuelPriceBase * (curSys.techLevel > 5 ? 0.8 : 1.2)) : fuelPriceBase;
+        var fuelPrice = curSys ? Math.round(fuelPriceBase * (1 + curSys.danger * 0.1)) : fuelPriceBase;
         var fuelNeeded = player.maxFuel - player.fuel;
         var fuelCost = fuelNeeded * fuelPrice;
 
@@ -598,7 +618,11 @@
         FA.draw.text('Refuel cost: ' + fuelCost + 'cr', contentX + 100, contentY + 140, { color: '#fd4', size: 12 });
 
         if (fuelNeeded > 0) {
-          FA.draw.text('ENTER to refuel', W / 2, contentY + 190, { color: '#4ef', size: 14, bold: true, align: 'center' });
+          var fuelMouse = FA.getMouse();
+          var fuelBtnHover = fuelMouse.y >= contentY + 175 && fuelMouse.y <= contentY + 210 && fuelMouse.x >= W / 2 - 80 && fuelMouse.x <= W / 2 + 80;
+          FA.draw.rect(W / 2 - 80, contentY + 178, 160, 28, fuelBtnHover ? '#224' : '#112');
+          FA.draw.strokeRect(W / 2 - 80, contentY + 178, 160, 28, '#4ef', 1);
+          FA.draw.text('REFUEL', W / 2, contentY + 192, { color: fuelBtnHover ? '#fff' : '#4ef', size: 14, bold: true, align: 'center', baseline: 'middle' });
         } else {
           FA.draw.text('Tank is full', W / 2, contentY + 190, { color: '#4f4', size: 14, align: 'center' });
         }
@@ -646,7 +670,7 @@
 
       // --- Tab 4: Repair ---
       if (state.stationTab === 4) {
-        var repairPrice = curSys ? Math.round(5 * (curSys.techLevel > 5 ? 0.7 : 1.3)) : 5;
+        var repairPrice = curSys ? Math.round(10 * (1 + curSys.techLevel * 0.05)) : 10;
         var hullNeeded = player.maxHull - player.hull;
         var repairCost = hullNeeded * repairPrice;
 
@@ -660,7 +684,11 @@
         FA.draw.text('Repair cost: ' + repairCost + 'cr', contentX + 100, contentY + 140, { color: '#fd4', size: 12 });
 
         if (hullNeeded > 0) {
-          FA.draw.text('ENTER to repair', W / 2, contentY + 190, { color: '#4ef', size: 14, bold: true, align: 'center' });
+          var repMouse = FA.getMouse();
+          var repBtnHover = repMouse.y >= contentY + 175 && repMouse.y <= contentY + 210 && repMouse.x >= W / 2 - 80 && repMouse.x <= W / 2 + 80;
+          FA.draw.rect(W / 2 - 80, contentY + 178, 160, 28, repBtnHover ? '#224' : '#112');
+          FA.draw.strokeRect(W / 2 - 80, contentY + 178, 160, 28, '#4ef', 1);
+          FA.draw.text('REPAIR', W / 2, contentY + 192, { color: repBtnHover ? '#fff' : '#4ef', size: 14, bold: true, align: 'center', baseline: 'middle' });
         } else {
           FA.draw.text('Hull is pristine', W / 2, contentY + 190, { color: '#4f4', size: 14, align: 'center' });
         }
@@ -901,7 +929,7 @@
       var hint = '';
       if (state.view === 'galaxy_map') hint = 'Arrows: select system | ENTER: jump | M: close map';
       else if (state.view === 'system_view') hint = 'WASD: fly | SPACE: shoot / dock | M: galaxy map';
-      else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | ESC: sell/undock';
+      else if (state.view === 'station') hint = '1-5: tabs | Arrows: navigate | ENTER: buy | Q: sell | ESC: undock';
       if (hint) {
         FA.draw.text(hint, W / 2, H - 12, { color: '#556', size: 10, align: 'center' });
       }
