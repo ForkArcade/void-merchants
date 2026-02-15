@@ -444,17 +444,17 @@
         player.angle += player.turnSpeed * dt;
       }
       if (FA.isHeld('up')) {
-        player.vx += Math.sin(player.angle) * player.speed * 0.15;
-        player.vy -= Math.cos(player.angle) * player.speed * 0.15;
+        player.vx += Math.sin(player.angle) * player.speed * 0.04;
+        player.vy -= Math.cos(player.angle) * player.speed * 0.04;
       }
       if (FA.isHeld('down')) {
-        player.vx -= Math.sin(player.angle) * player.speed * 0.05;
-        player.vy += Math.cos(player.angle) * player.speed * 0.05;
+        player.vx -= Math.sin(player.angle) * player.speed * 0.015;
+        player.vy += Math.cos(player.angle) * player.speed * 0.015;
       }
 
       // Friction
-      player.vx *= 0.98;
-      player.vy *= 0.98;
+      player.vx *= 0.99;
+      player.vy *= 0.99;
 
       // Position
       player.x += player.vx;

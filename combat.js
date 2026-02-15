@@ -82,13 +82,13 @@
 
     // Thrust
     if (FA.isHeld('up')) {
-      player.vx += Math.sin(player.angle) * player.speed * 0.15;
-      player.vy -= Math.cos(player.angle) * player.speed * 0.15;
+      player.vx += Math.sin(player.angle) * player.speed * 0.04;
+      player.vy -= Math.cos(player.angle) * player.speed * 0.04;
     }
 
     // Friction
-    player.vx *= 0.98;
-    player.vy *= 0.98;
+    player.vx *= 0.99;
+    player.vy *= 0.99;
 
     // Position
     player.x += player.vx;
@@ -293,13 +293,13 @@
 
     // Apply thrust
     if (shouldThrust) {
-      enemy.vx += Math.sin(enemy.angle) * enemy.speed * 0.1;
-      enemy.vy -= Math.cos(enemy.angle) * enemy.speed * 0.1;
+      enemy.vx += Math.sin(enemy.angle) * enemy.speed * 0.03;
+      enemy.vy -= Math.cos(enemy.angle) * enemy.speed * 0.03;
     }
 
     // Friction
-    enemy.vx *= 0.98;
-    enemy.vy *= 0.98;
+    enemy.vx *= 0.99;
+    enemy.vy *= 0.99;
 
     // Position
     enemy.x += enemy.vx;
