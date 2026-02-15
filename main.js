@@ -452,6 +452,14 @@
         player.vy += Math.cos(player.angle) * player.speed * 0.015;
       }
 
+      // Star gravity — pull player toward center (0,0)
+      var distToStar = Math.sqrt(player.x * player.x + player.y * player.y);
+      if (distToStar > 20) {
+        var grav = 0.003;
+        player.vx -= (player.x / distToStar) * grav;
+        player.vy -= (player.y / distToStar) * grav;
+      }
+
       // Friction
       player.vx *= 0.99;
       player.vy *= 0.99;
@@ -464,8 +472,14 @@
       FA.camera.x = player.x - W / 2;
       FA.camera.y = player.y - H / 2;
 
-      // Check proximity to stations
+      // Orbit stations around star
       var stations = Galaxy.getStations(Player.getCurrentSystem());
+      for (var oi = 0; oi < stations.length; oi++) {
+        var orb = stations[oi];
+        orb.orbitAngle += dt * 0.00005 * (1 + oi * 0.3);
+        orb.x = Math.cos(orb.orbitAngle) * orb.orbitRadius;
+        orb.y = Math.sin(orb.orbitAngle) * orb.orbitRadius;
+      }
       state.nearStation = -1;
       for (var si = 0; si < stations.length; si++) {
         var sdx = player.x - stations[si].x;
@@ -593,16 +607,6 @@
     }
     if (Player.getReputation('merchants') > 10) {
       triggerNarrative('merchant_guild', 'merchant_guild');
-    }
-
-    // --- Narrative sync ---
-    if (typeof ForkArcade !== 'undefined' && FA.narrative) {
-      var narrativeCfg = FA.lookup('config', 'narrative');
-      ForkArcade.updateNarrative({
-        currentNode: FA.narrative.getNode(),
-        graph: narrativeCfg ? narrativeCfg.graph : null,
-        events: FA.narrative.getEvents ? FA.narrative.getEvents() : []
-      });
     }
 
     FA.clearInput();

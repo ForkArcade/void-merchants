@@ -952,9 +952,9 @@
       FA.draw.text(String(totalScore), rightX, totalY + 5, { color: titleColor, size: 16, bold: true, align: 'right' });
 
       // Narrative ending text
-      var currentNode = FA.narrative && FA.narrative.getNode ? FA.narrative.getNode() : null;
-      if (currentNode) {
-        var narText = FA.lookup('narrativeText', currentNode);
+      var currentNodeId = FA.narrative ? FA.narrative.currentNode : null;
+      if (currentNodeId) {
+        var narText = FA.lookup('narrativeText', currentNodeId);
         if (narText) {
           FA.draw.text(narText.text, W / 2, totalY + 55, { color: narText.color, size: 13, align: 'center' });
         }

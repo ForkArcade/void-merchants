@@ -80,7 +80,8 @@
     var c = FA.lookup('commodities', commodityId);
     if (!c) return 0;
     var mod = c.economyMod[system.economy] || 1.0;
-    var fluct = Math.sin(_marketTime * 0.0004 + system.id * 7.3) * 0.5 + 0.5;
+    var stepped = Math.floor(_marketTime / 5000) * 5000;
+    var fluct = Math.sin(stepped * 0.0004 + system.id * 7.3) * 0.5 + 0.5;
     return Math.round(c.basePrice * mod * (0.8 + fluct * 0.4) * (1 + system.danger * 0.05));
   }
 
